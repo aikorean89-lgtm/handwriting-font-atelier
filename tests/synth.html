@@ -1,0 +1,56 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../node_modules/@fontsource/nanum-pen-script/index.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/gaegu/400.css">
+<script src="../node_modules/@techstark/opencv-js/dist/opencv.js"></script>
+</head><body><canvas id="c"></canvas><script type="module">
+window.synth = async (sheetNo, fontName, seed, opts = {}) => {
+  const layout = await (await fetch('../src/data/template-layout.json')).json()
+  const def = opts.cells ? { cells: opts.cells } : layout.sheets.find(s => s.sheet === sheetNo)
+  let s = seed
+  const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647 }
+  const img = new Image(); img.src = opts.img || `tpl-${sheetNo}.png`; await img.decode()
+  const W = img.width, H = img.height, k = W / 210
+  const c = document.createElement('canvas'); c.width = W; c.height = H
+  const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0)
+  const chars = def.cells.map(x => x.char).filter(Boolean).join('')
+  await document.fonts.load(`100px "${fontName}"`, chars)
+  for (const cell of def.cells) {
+    if (!cell.char) continue
+    if (opts.empty && opts.empty.includes(cell.index)) continue
+    const [x, y, w] = cell.cell
+    const cx = (x + w / 2) * k + (rnd() - 0.5) * w * k * 0.06, cy = (y + w / 2) * k + (rnd() - 0.5) * w * k * 0.06
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate((rnd() - 0.5) * 0.1)
+    const size = w * k * (0.78 + rnd() * 0.12)
+    ctx.font = `${size}px "${fontName}"`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillStyle = '#1b1a1f'; ctx.fillText(cell.char, 0, size * 0.04)
+    if (fontName === 'Gaegu') { ctx.lineWidth = size * 0.012; ctx.strokeStyle = '#1b1a1f'; ctx.strokeText(cell.char, 0, size*0.04) }
+    ctx.restore()
+    if (opts.skip && opts.skip.includes(cell.index)) {
+      const [mx, my, mr] = cell.skipMark; ctx.beginPath(); ctx.arc(mx * k, my * k, mr * k * 0.95, 0, 7); ctx.fillStyle = '#1b1a1f'; ctx.fill()
+    }
+  }
+  // 사진처럼: 원근, 배경, 그림자, 흐림, 잡음
+  const cv = window.cv instanceof Promise ? await window.cv : window.cv
+  const src = cv.imread(c)
+  const OW = 3000, OH = 4000
+  const dst = new cv.Mat(OH, OW, cv.CV_8UC4, new cv.Scalar(70, 66, 60, 255))
+  const j = (v) => v + (rnd() - 0.5) * 140
+  const from = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, W, 0, W, H, 0, H])
+  const to = cv.matFromArray(4, 1, cv.CV_32FC2, [j(330), j(380), j(2700), j(300), j(2820), j(3700), j(250), j(3600)])
+  const M = cv.getPerspectiveTransform(from, to)
+  cv.warpPerspective(src, dst, M, new cv.Size(OW, OH), cv.INTER_LINEAR, cv.BORDER_TRANSPARENT)
+  cv.GaussianBlur(dst, dst, new cv.Size(3, 3), 0.9)
+  const out = document.getElementById('c'); cv.imshow(out, dst)
+  const o = out.getContext('2d')
+  const g = o.createLinearGradient(0, 0, OW, OH * 0.6)
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.55, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(10,8,20,0.38)')
+  o.fillStyle = g; o.fillRect(0, 0, OW, OH)
+  o.fillStyle = 'rgba(255,200,140,0.06)'; o.fillRect(0, 0, OW, OH) // 따뜻한 조명
+  const d = o.getImageData(0, 0, OW, OH)
+  for (let i = 0; i < d.data.length; i += 4) { const n = (rnd() - 0.5) * 18; d.data[i] += n; d.data[i + 1] += n; d.data[i + 2] += n }
+  o.putImageData(d, 0, 0)
+  src.delete(); dst.delete(); from.delete(); to.delete(); M.delete()
+  return out.toDataURL('image/jpeg', 0.86)
+}
+window.ready = true
+</script></body></html>

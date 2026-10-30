@@ -1,0 +1,34 @@
+{
+  "name": "jaguk",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@fontsource-variable/hahmlet": "^5.3.0",
+    "@techstark/opencv-js": "^5.0.0-release.1",
+    "@vercel/blob": "^2.8.2",
+    "idb-keyval": "^6.3.0",
+    "pretendard": "^1.3.9",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@fontsource/gaegu": "^5.3.0",
+    "@fontsource/nanum-pen-script": "^5.3.0",
+    "@types/node": "^24.13.3",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.81.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0"
+  }
+}

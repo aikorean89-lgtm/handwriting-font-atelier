@@ -49,7 +49,12 @@ export function Home({ work, onStartNew, onResume, onGallery }: { work: Project 
                 {!work && <button className="btn primary" onClick={onStartNew}>폰트 만들기 시작</button>}
                 <TemplateButton className={work ? 'btn' : 'btn quiet'} label="템플릿만 받기" />
               </div>
-              <p className="hero-gallery"><button className="linkish" onClick={onGallery}>다른 사람들이 만든 글씨체 둘러보기 →</button></p>
+              <p className="hero-gallery">
+                <button className="btn gallery-cta" onClick={onGallery}>
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><rect x="2" y="2" width="5" height="5" /><rect x="9" y="2" width="5" height="5" /><rect x="2" y="9" width="5" height="5" /><rect x="9" y="9" width="5" height="5" /></svg>
+                  다른 사람들이 만든 글씨체 갤러리
+                </button>
+              </p>
             </div>
             <HeroGlyph ch="한" />
           </section>

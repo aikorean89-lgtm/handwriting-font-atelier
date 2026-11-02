@@ -1,0 +1,23 @@
+<!doctype html><meta charset="utf-8"><body style="margin:0;background:#fff">
+<canvas id="c" width="3520" height="440"></canvas>
+<script type="module">
+import '@fontsource-variable/hahmlet'
+import { splitForDisplay } from '/src/engine/refmask.ts'
+window.go = async (ch) => {
+  const SIZE = 440, font = `800 ${Math.round(SIZE * 0.9)}px "Hahmlet Variable", serif`
+  await document.fonts.load(font, ch + '학할함항안간난만산')
+  const p = splitForDisplay(ch, SIZE, font)
+  const c = document.getElementById('c'), x = c.getContext('2d')
+  const img = x.createImageData(SIZE, SIZE)
+  const cols = { cho: [194, 80, 47], jung: [47, 138, 115], jong: [176, 132, 26] }
+  for (let i = 0; i < SIZE * SIZE; i++) {
+    let col = p.all[i] ? [0, 0, 0] : [255, 255, 255]
+    if (p.cho[i]) col = cols.cho; else if (p.jung[i]) col = cols.jung; else if (p.jong && p.jong[i]) col = cols.jong
+    img.data.set([...col, 255], i * 4)
+  }
+  x.putImageData(img, (window.k = (window.k || 0)) * SIZE, 0); window.k++
+  let un = 0; for (let i = 0; i < SIZE * SIZE; i++) if (p.all[i] && !p.cho[i] && !p.jung[i] && !(p.jong && p.jong[i])) un++
+  return un
+}
+window.ready = true
+</script>

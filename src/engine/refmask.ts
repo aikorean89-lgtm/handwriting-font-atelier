@@ -300,6 +300,18 @@ export function splitForDisplay(ch: string, size: number, font: string): { all: 
   const nc = dilate(keep2, size, size, r)
   const cho = new Uint8Array(N), jung = new Uint8Array(N)
   for (let i = 0; i < N; i++) { if (!all[i] || (jong && jong[i])) continue; if (!nc[i]) cho[i] = 1; else jung[i] = 1 }
+  // 따로 떨어진 획 덩어리는 대부분이 속한 자모로 통째로 넘긴다 (예: '한'의 ㄴ 윗머리가 중성으로 칠해지던 문제)
+  const { labels: comp, sizes } = components({ w: size, h: size, data: all })
+  const votes = sizes.map(() => [0, 0, 0])
+  for (let i = 0; i < N; i++) if (comp[i]) votes[comp[i]][cho[i] ? 0 : jung[i] ? 1 : 2]++
+  for (let i = 0; i < N; i++) {
+    const v = votes[comp[i]]
+    if (!comp[i]) continue
+    const best = v[0] >= v[1] && v[0] >= v[2] ? 0 : v[1] >= v[2] ? 1 : 2
+    if (v[best] < sizes[comp[i]] * 0.6) continue // 자모 여럿이 붙은 덩어리는 화소 판정을 그대로 쓴다
+    cho[i] = best === 0 ? 1 : 0; jung[i] = best === 1 ? 1 : 0
+    if (jong) jong[i] = best === 2 ? 1 : 0
+  }
   cleanSlots(all, cho, jung, jong, size)
   return { all, cho, jung, jong }
 }

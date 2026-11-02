@@ -29,11 +29,11 @@ export const PAGE_H = LAYOUT.page[1] * PX_PER_MM
 
 export type Tier = 'quick' | 'standard'
 export const TIERS: Record<Tier, { label: string; sheets: number[]; minutes: number; hangul: number; desc: string }> = {
-  quick: { label: '빠른 폰트', sheets: [1], minutes: 7, hangul: 90, desc: '한 장, 100칸. 처음이라면 여기서 시작하세요.' },
-  standard: { label: '표준 폰트', sheets: [1, 2, 3, 4], minutes: 25, hangul: 225, desc: '네 장, 영문과 기호까지. 자모 모양을 모두 직접 받아 더 닮습니다.' },
+  quick: { label: '빠른 모드', sheets: [1], minutes: 7, hangul: 90, desc: '한 장, 100칸. 처음이라면 여기서 시작하세요.' },
+  standard: { label: '일반 모드', sheets: [1, 2, 3, 4], minutes: 25, hangul: 225, desc: '네 장, 영문과 기호까지. 자모 모양을 모두 직접 받아 더 닮습니다.' },
 }
 
-// ── 보충 시트: 표준 2번 시트와 같은 칸 배치(18mm, 8×10)에 고칠 글자만 담는다 ──
+// ── 보충 시트: 일반 모드 2번 시트와 같은 칸 배치(18mm, 8×10)에 고칠 글자만 담는다 ──
 export const SUPP_BASE = 100
 export const SUPP_MAX = 80
 const suppChars = new Map<number, string[]>()

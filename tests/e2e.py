@@ -14,7 +14,7 @@ with sync_playwright() as p:
     pg.on('pageerror', lambda e: errs.append(str(e)))
     pg.goto(os.environ.get('BASE','http://localhost:4173/')); pg.wait_for_timeout(3500); shot(pg,'00-home')
     pg.get_by_role('button', name='폰트 만들기 시작').click(); pg.wait_for_timeout(400)
-    if tier=='standard': pg.get_by_role('button', name='표준 폰트').first.click()
+    if tier=='standard': pg.get_by_role('button', name='일반 모드').first.click()
     shot(pg,'01-tier')
     pg.get_by_role('button', name='로 하기').click(); pg.wait_for_timeout(300); shot(pg,'02-template')
     pg.get_by_role('button', name='다 썼어요, 찍으러 가기').click(); pg.wait_for_timeout(300)

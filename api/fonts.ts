@@ -2,14 +2,16 @@
 //   GET    /api/fonts                 공개된 글씨체 목록
 //   POST   /api/fonts                 multipart: name, author, direct, ttf, preview → { font, key }
 //   DELETE /api/fonts?id=…&key=…      올린 브라우저의 열쇠 또는 x-admin-token(GALLERY_ADMIN_TOKEN)
+//   PATCH  /api/fonts?id=…&key=…      { tags } 태그 고치기 (올린 브라우저의 열쇠 또는 관리자)
+//   POST   /api/fonts?like=…&on=1|0   좋아요 (x-voter: 브라우저마다 만든 임의 번호)
 // 필요한 환경 변수: BLOB_READ_WRITE_TOKEN (Vercel 대시보드에서 Blob 저장소를 연결하면 자동으로 생김)
 import { del, list, put } from '@vercel/blob'
 
-export interface PublicFont { id: string; name: string; author: string; createdAt: number; ttfUrl: string; previewUrl: string; direct: number; sizeKB: number }
+export interface PublicFont { id: string; name: string; author: string; createdAt: number; ttfUrl: string; previewUrl: string; direct: number; sizeKB: number; tags?: string[]; likes?: number; liked?: boolean }
 interface Meta extends PublicFont { keyHash: string }
 
 export interface Store {
-  put(path: string, body: Blob | string, contentType: string): Promise<{ url: string }>
+  put(path: string, body: Blob | string, contentType: string, overwrite?: boolean): Promise<{ url: string }>
   list(prefix: string): Promise<{ pathname: string; url: string; uploadedAt: number }[]>
   read(url: string): Promise<string | null>
   del(urls: string[]): Promise<void>
@@ -25,6 +27,15 @@ const clean = (s: unknown, n: number) => String(s ?? '').replace(/[\u0000-\u001f
 const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('')
 const sha = async (s: string) => hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))
 const isId = (s: string) => /^[a-z0-9]{8,32}$/.test(s)
+/** 태그: 최대 3개, 각 10자 */
+export function cleanTags(v: unknown): string[] {
+  const arr = Array.isArray(v) ? v : String(v ?? '').split(',')
+  return [...new Set(arr.map((t) => clean(t, 10)).filter(Boolean))].slice(0, 3)
+}
+const voterOf = async (req: Request) => {
+  const v = req.headers.get('x-voter') || ''
+  return /^[A-Za-z0-9_-]{16,64}$/.test(v) ? (await sha('voter:' + v)).slice(0, 32) : null
+}
 
 function strip(m: Meta): PublicFont {
   const { keyHash: _k, ...pub } = m
@@ -45,11 +56,36 @@ export async function handle(req: Request, store: Store | null, env: { GALLERY_A
 
   if (req.method === 'GET') {
     const metas = (await store.list('gallery/meta/')).sort((a, b) => b.uploadedAt - a.uploadedAt).slice(0, MAX_LIST)
+    const voter = await voterOf(req)
+    const likes = new Map<string, number>(), mine = new Set<string>()
+    for (const b of await store.list('gallery/likes/')) {
+      const [, , fid, who] = b.pathname.split('/')
+      if (!fid) continue
+      likes.set(fid, (likes.get(fid) ?? 0) + 1)
+      if (voter && who === `${voter}.txt`) mine.add(fid)
+    }
     const fonts = (await Promise.all(metas.map(async (m) => {
       const t = await store.read(m.url)
       try { return t ? strip(JSON.parse(t) as Meta) : null } catch { return null }
     }))).filter((x): x is PublicFont => !!x)
+      .map((f) => ({ ...f, tags: f.tags ?? [], likes: likes.get(f.id) ?? 0, liked: mine.has(f.id) }))
+      .sort((a, b) => b.createdAt - a.createdAt)
     return json({ fonts })
+  }
+
+  if (req.method === 'POST' && url.searchParams.has('like')) {
+    const id = url.searchParams.get('like') || ''
+    if (!isId(id)) return json({ error: '잘못된 요청이에요.' }, 400)
+    const voter = await voterOf(req)
+    if (!voter) return json({ error: '잘못된 요청이에요.' }, 400)
+    if (!(await readMeta(store, id))) return json({ error: '이미 없는 글씨체예요.' }, 404)
+    const path = `gallery/likes/${id}/${voter}.txt`
+    const on = url.searchParams.get('on') !== '0'
+    const hit = (await store.list(path)).find((b) => b.pathname === path)
+    if (on && !hit) await store.put(path, '1', 'text/plain')
+    if (!on && hit) await store.del([hit.url])
+    const count = (await store.list(`gallery/likes/${id}/`)).length
+    return json({ likes: count, liked: on })
   }
 
   if (req.method === 'POST') {
@@ -76,9 +112,24 @@ export async function handle(req: Request, store: Store | null, env: { GALLERY_A
     const meta: Meta = {
       id, name, author: clean(fd.get('author'), 20), createdAt: Date.now(), ttfUrl: t.url, previewUrl: p.url,
       direct: Math.max(0, Math.min(11172, Number(fd.get('direct')) || 0)), sizeKB: Math.round(ttf.size / 1024), keyHash: await sha(key),
+      tags: cleanTags(fd.get('tags')),
     }
     await store.put(`gallery/meta/${id}.json`, JSON.stringify(meta), 'application/json')
     return json({ font: strip(meta), key }, 201)
+  }
+
+  if (req.method === 'PATCH') {
+    const id = url.searchParams.get('id') || ''
+    if (!isId(id)) return json({ error: '잘못된 요청이에요.' }, 400)
+    const found = await readMeta(store, id)
+    if (!found) return json({ error: '이미 없는 글씨체예요.' }, 404)
+    const admin = env.GALLERY_ADMIN_TOKEN && req.headers.get('x-admin-token') === env.GALLERY_ADMIN_TOKEN
+    const key = url.searchParams.get('key') || ''
+    if (!admin && (!key || (await sha(key)) !== found.meta.keyHash)) return json({ error: '이 글씨체를 고칠 권한이 없어요.' }, 403)
+    const body = await req.json().catch(() => ({})) as { tags?: unknown }
+    const meta: Meta = { ...found.meta, tags: cleanTags(body.tags) }
+    await store.put(`gallery/meta/${id}.json`, JSON.stringify(meta), 'application/json', true)
+    return json({ font: strip(meta) })
   }
 
   if (req.method === 'DELETE') {
@@ -89,7 +140,8 @@ export async function handle(req: Request, store: Store | null, env: { GALLERY_A
     const admin = env.GALLERY_ADMIN_TOKEN && req.headers.get('x-admin-token') === env.GALLERY_ADMIN_TOKEN
     const key = url.searchParams.get('key') || ''
     if (!admin && (!key || (await sha(key)) !== found.meta.keyHash)) return json({ error: '이 글씨체를 내릴 권한이 없어요.' }, 403)
-    await store.del([found.url, found.meta.ttfUrl, found.meta.previewUrl].filter(Boolean))
+    const likes = (await store.list(`gallery/likes/${id}/`)).map((b) => b.url)
+    await store.del([found.url, found.meta.ttfUrl, found.meta.previewUrl, ...likes].filter(Boolean))
     return json({ ok: true })
   }
 
@@ -99,8 +151,8 @@ export async function handle(req: Request, store: Store | null, env: { GALLERY_A
 function blobStore(): Store | null {
   if (!process.env.BLOB_READ_WRITE_TOKEN) return null
   return {
-    put: async (path, body, contentType) => {
-      const r = await put(path, body, { access: 'public', contentType, addRandomSuffix: false, cacheControlMaxAge: 60 })
+    put: async (path, body, contentType, overwrite) => {
+      const r = await put(path, body, { access: 'public', contentType, addRandomSuffix: false, cacheControlMaxAge: 60, allowOverwrite: !!overwrite })
       return { url: r.url }
     },
     list: async (prefix) => {
@@ -122,6 +174,7 @@ const run = (req: Request) => handle(req, blobStore(), { GALLERY_ADMIN_TOKEN: pr
 export const GET = run
 export const POST = run
 export const DELETE = run
+export const PATCH = run
 
 /** 테스트용 메모리 저장소 */
 export function memoryStore(): Store & { files: Map<string, { body: Blob | string; type: string; at: number }> } {

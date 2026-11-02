@@ -28,7 +28,7 @@ type Mode =
   | { k: 'corners'; slot: number; canvas: HTMLCanvasElement }
   | { k: 'pick'; slot: number; canvas: HTMLCanvasElement; corners?: Pt[] }
 
-export function CaptureScreen({ project, onSheet, onNext }: { project: Project; onSheet: (s: Sheet) => void; onNext: () => void }) {
+export function CaptureScreen({ project, onSheet, onNext, onDraw }: { project: Project; onSheet: (s: Sheet) => void; onNext: () => void; onDraw: () => void }) {
   const tier: Tier = project.tier
   const supps = suppNos(project)
   const slots = [...TIERS[tier].sheets, ...supps]
@@ -84,6 +84,7 @@ export function CaptureScreen({ project, onSheet, onNext }: { project: Project; 
     <main className="wrap screen">
       <Head n="03" title="시트를 찍으세요">시트를 평평한 곳에 놓고, 네 모서리 검은 마커가 화면에 다 들어오게 찍으세요. 마커가 잡히면 빨간 표시가 붙고 자동으로 찍힙니다. 갤러리 사진을 올려도 됩니다.</Head>
 
+      <p className="note">종이 대신 화면에 바로 쓰고 싶다면 <button className="linkish" onClick={onDraw}>화면에 직접 쓰기</button>로 가세요. 찍은 시트와 화면에 쓴 글자를 함께 쓸 수 있어요.</p>
       {!live && <p className="note">이 화면에서는 실시간 카메라를 쓸 수 없어요. 찍어서 올리기를 누르면 휴대폰에서는 카메라나 앨범을 고를 수 있어요.</p>}
       {err && <div className="error" role="alert">{err}</div>}
       {info && <div className="error" role="status" style={{ borderLeftColor: 'var(--warn)' }}>{info}</div>}
@@ -123,10 +124,10 @@ export function CaptureScreen({ project, onSheet, onNext }: { project: Project; 
               <button className="slot-thumb" style={{ cursor: s ? 'pointer' : 'default' }} onClick={() => s && setFocus(n)} aria-label={s ? `${sheetName(n)} 결과 보기` : `${sheetName(n)} 아직 없음`}>
                 {s ? <img src={s.preview} alt="" /> : <span aria-hidden>{isSupplement(n) ? `S${n - 100}` : n}</span>}
               </button>
-              <h3>{sheetName(n)} {n === 1 ? '(빠른 폰트)' : isSupplement(n) ? `(${sheetDef(n)?.cells.length ?? 0}자)` : '(표준 추가)'}</h3>
+              <h3>{sheetName(n)} {n === 1 ? '(빠른 모드)' : isSupplement(n) ? `(${sheetDef(n)?.cells.length ?? 0}자)` : '(일반 모드 추가)'}</h3>
               <span className="tag">
                 <span className={`dot ${s ? (warn ? 'warn' : 'ok') : 'off'}`} />
-                {s ? (warn ? `확인할 칸 ${warn}개` : '모든 칸 읽음') : '아직 안 찍음'}
+                {s ? (s.drawn ? `화면에 쓴 글자 ${s.cells.filter((c) => c.state === 'ok').length}자` : warn ? `확인할 칸 ${warn}개` : '모든 칸 읽음') : '아직 안 찍음'}
               </span>
               <div className="row">
                 {live && <button className="btn small" onClick={() => setMode({ k: 'camera', slot: n })} disabled={mode.k === 'processing'}>카메라로 찍기</button>}
@@ -165,7 +166,7 @@ export function CaptureScreen({ project, onSheet, onNext }: { project: Project; 
 
 function SheetCheck({ sheet }: { sheet: Sheet }) {
   const def = sheetDef(sheet.no, sheet.ver ?? 1)
-  if (!def) return null
+  if (!def || sheet.drawn) return null
   const by = (st: string) => sheet.cells.filter((c) => c.state === st).length
   const [W, H] = LAYOUT.page
   return (

@@ -10,6 +10,7 @@ import { BuildScreen } from './screens/Build'
 import { PlayScreen } from './screens/Play'
 import { ExportScreen } from './screens/Export'
 import { GalleryScreen } from './screens/Gallery'
+import { DrawScreen } from './screens/Draw'
 import { type Cell, type Project, type Sheet, type Step, buildCells, clearProject, loadProject, needsResegment, newProject, resegment, saveProject } from './state'
 import { type BuildOptions, type BuildResult, buildFont } from './engine/build'
 import { SUPP_BASE, sheetDef } from './engine/template'
@@ -94,11 +95,12 @@ export default function App() {
   const onBuilt = useCallback((r: BuildResult) => { applyResult(r); go('play') }, [applyResult, go])
 
   // 굵기·자간을 바꿔 그 자리에서 다시 만든다
-  const rebuild = useCallback((opts: BuildOptions) => {
-    if (!project) return
+  const rebuild = useCallback((opts: BuildOptions, base?: Project) => {
+    const src = base ?? project
+    if (!src) return
     update((p) => ({ ...p, settings: opts }))
     setRebuilding(0)
-    buildFont(buildCells(project), project.fontName || '내 손글씨', (pr) => {
+    buildFont(buildCells(src), src.fontName || '내 손글씨', (pr) => {
       const w = { prepare: 0, vector: 0.1, compose: 0.4, write: 0.9, done: 1 }[pr.phase]
       const span = pr.phase === 'vector' ? 0.3 : pr.phase === 'compose' ? 0.5 : 0.1
       setRebuilding(Math.min(1, w + span * (pr.total ? pr.done / pr.total : 0)))
@@ -125,7 +127,7 @@ export default function App() {
     if (!project || !segStep || reseg || !needsResegment(project)) return
     setReseg({ done: 0, total: 1 })
     resegment(project, (done, total) => setReseg({ done, total })).then((p) => {
-      setProject((cur) => (cur ? { ...p, flagged: cur.flagged, fontName: cur.fontName, settings: cur.settings, supps: cur.supps } : p))
+      setProject((cur) => (cur ? { ...p, flagged: cur.flagged, fontName: cur.fontName, settings: cur.settings, supps: cur.supps, edits: cur.edits } : p))
       setResult(null)
       setReseg(null)
     }).catch(() => setReseg(null))
@@ -163,15 +165,23 @@ export default function App() {
       </main>
     )
   } else if (project) {
-    if (step === 'template') screen = <TemplateScreen tier={project.tier} onNext={() => go('capture')} />
-    if (step === 'capture') screen = <CaptureScreen project={project} onSheet={onSheet} onNext={() => go('review')} />
+    if (step === 'template') screen = <TemplateScreen tier={project.tier} onNext={() => go('capture')} onDraw={() => go('draw')} />
+    if (step === 'capture') screen = <CaptureScreen project={project} onSheet={onSheet} onNext={() => go('review')} onDraw={() => go('draw')} />
+    if (step === 'draw') screen = <DrawScreen project={project} onSheet={onSheet} onNext={() => go('review')} onBack={() => go('template')} />
     if (step === 'review') screen = <ReviewScreen project={project} onCell={onCell} onNext={() => go('jamo')} onBack={() => go('capture')} />
     if (step === 'jamo') screen = <JamoScreen project={project} onCell={onCell} onNext={() => go('build')} onBack={() => go('review')} />
     if (step === 'build') screen = <BuildScreen project={project} onDone={onBuilt} onBack={() => go('jamo')} />
     if (step === 'play') screen = result ? (
       <PlayScreen
-        result={result} flagged={project.flagged} settings={project.settings ?? {}} rebuilding={rebuilding} supps={project.supps ?? {}}
+        result={result} flagged={project.flagged} settings={project.settings ?? {}} rebuilding={rebuilding} supps={project.supps ?? {}} edits={project.edits ?? {}}
         onFlag={(f) => update((p) => ({ ...p, flagged: f }))} onRebuild={rebuild} onSupp={(s) => update((p) => ({ ...p, supps: s }))}
+        onEdit={(ch, bm) => {
+          const edits = { ...(project.edits ?? {}) }
+          if (bm) edits[ch] = bm; else delete edits[ch]
+          const next = { ...project, edits }
+          setProject(next)
+          rebuild(project.settings ?? {}, next)
+        }}
         onCapture={() => go('capture')} onNext={() => go('export')} onRedo={() => go('jamo')}
       />
     ) : null

@@ -9,7 +9,7 @@ import { buildTTF, signedArea, type TGlyph, type TPoint } from './ttf'
 import { type VContour, vectorize } from './vectorize'
 import { AUTO_PUNCT, drawPunct, penWidth, textMetrics } from './punct'
 
-export interface BuildCell { index: number; char: string; bitmap: Bitmap; labels?: Uint8Array; segCost?: number; edited?: boolean }
+export interface BuildCell { index: number; char: string; bitmap: Bitmap; labels?: Uint8Array; segCost?: number; edited?: boolean; raw?: boolean /* 손본 글자: 굵기 조절을 다시 하지 않는다 */ }
 export interface BuildProgress { phase: 'prepare' | 'vector' | 'compose' | 'write' | 'done'; done: number; total: number; direct?: Set<number>; composedUpTo?: number }
 export interface BuildResult {
   ttf: Uint8Array
@@ -22,6 +22,8 @@ export interface BuildResult {
   missingJamo: string[]
   extraChars: number
   autoPunct: string[]
+  /** 칸 좌표(0–1) → 글꼴 단위: x = k·u + cX, y = −k·v + cY (글자 손보기에서 거꾸로 쓴다) */
+  frame: { k: number; cX: number; cY: number }
 }
 
 /** 굵기(확대 화소 단위 −3…+6)와 자간(1/1000 em) */
@@ -120,7 +122,7 @@ export async function buildFont(cellsIn: BuildCell[], family: string, onProgress
   for (let i = 0; i < cells.length; i++) {
     const c = cells[i]
     const cp = c.char.codePointAt(0)!
-    const cs = vectorize(cv, c.bitmap, undefined, undefined, 1, weight)
+    const cs = vectorize(cv, c.bitmap, undefined, undefined, 1, c.raw ? 0 : weight)
     if (!cs.length) continue
     if (isHangul(c.char)) {
       const pts = toPoints(cs, TX, TY)
@@ -186,7 +188,7 @@ export async function buildFont(cellsIn: BuildCell[], family: string, onProgress
   const all = [...glyphs, ...composites.map((g) => (g.components!.length ? g : { advance: g.advance, unicodes: g.unicodes }))]
   const ttf = writeFont(all, family)
   onProgress({ phase: 'done', done: 1, total: 1, direct: directSet, composedUpTo: SCOUNT })
-  return { ttf, glyphs: all, directChars: [...direct.keys()].map((c) => String.fromCodePoint(c)), family, directHangul: direct.size, composed, refFallback, missingJamo: lib.missingJamo(), extraChars, autoPunct }
+  return { ttf, glyphs: all, directChars: [...direct.keys()].map((c) => String.fromCodePoint(c)), family, directHangul: direct.size, composed, refFallback, missingJamo: lib.missingJamo(), extraChars, autoPunct, frame: { k, cX, cY } }
 }
 
 /** 같은 글리프로 이름만 바꿔 다시 쓴다 */

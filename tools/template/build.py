@@ -71,16 +71,16 @@ def page(kind,idx,total,title,sub,items,cols,cell,gx,label,gy,y0,instr,start=1,f
         o.append(f'<rect x="141" y="{fy+3.6}" width="4" height="4" fill="none" stroke="{BLUE}" stroke-width="0.3"/>')
         o.append(t(147,fy+5.6,'하늘색 선은 촬영 후 자동으로 지워져요',2.2,KR,GRAY))
         o.append(t(147,fy+8.6,'네 모서리 검은 마커가 다 보이게 찍으세요',2.2,KR,GRAY))
-        o.append(t(16,fy+13.4,'표준 폰트를 원하면 2–4번 시트도 함께 쓰세요. 이 시트는 그대로 1번 시트로 쓰입니다.',2.2,KR,GRAY))
+        o.append(t(16,fy+13.4,'일반 모드로 만들려면 2–4번 시트도 함께 쓰세요. 이 시트는 그대로 1번 시트로 쓰입니다.',2.2,KR,GRAY))
     svg=f'<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 210 297">{"".join(o)}</svg>'
     return svg,{'sheet':idx,'kind':kind,'qr':code,'cells':layout}
 INSTR_Q='① 칸 위 글자를 평소 크기·속도로 따라 쓰세요   ② 하늘색 십자 가운데, 칸 밖으로 나가지 않게   ③ 초성·중성·종성 획은 살짝 띄우기   ④ 틀린 칸은 ○를 칠하기'
 INSTR_S='같은 펜으로 쓰세요 · 낯선 글자도 모양만 따라 쓰면 됩니다 · 틀린 칸은 ○를 칠하고, 여분 칸 위 빈칸에 그 글자를 적어 다시 쓰세요'
 pages=[]; layouts=[]
-s,l=page('quick',1,4,'빠른 폰트 시트 — 이 한 장만 쓰면 11,172자 폰트가 만들어집니다',f'SHEET 01/04 · QUICK · 100 CELLS (HANGUL 90 + DIGITS 10) · 16MM · TEMPLATE v{V}.0',QUICK,10,16,2,4.2,1.6,38,INSTR_Q,1,True)
+s,l=page('quick',1,4,'빠른 모드 시트 — 이 한 장만 쓰면 11,172자 폰트가 만들어집니다',f'SHEET 01/04 · QUICK · 100 CELLS (HANGUL 90 + DIGITS 10) · 16MM · TEMPLATE v{V}.0',QUICK,10,16,2,4.2,1.6,38,INSTR_Q,1,True)
 pages.append(s); layouts.append(l)
 for p in range(3):
-    s,l=page('standard',p+2,4,f'표준 폰트 추가 시트 {p+1}/3 — 1번 시트와 함께 촬영하세요',f'SHEET {p+2:02d}/04 · STANDARD · 80 CELLS · 18MM · TEMPLATE v{V}.0',STD[p*80:(p+1)*80],8,18,3,4.6,1.4,38,INSTR_S,101+p*80)
+    s,l=page('standard',p+2,4,f'일반 모드 추가 시트 {p+1}/3 — 1번 시트와 함께 촬영하세요',f'SHEET {p+2:02d}/04 · STANDARD · 80 CELLS · 18MM · TEMPLATE v{V}.0',STD[p*80:(p+1)*80],8,18,3,4.6,1.4,38,INSTR_S,101+p*80)
     pages.append(s); layouts.append(l)
 meta={'version':f'{V}.0','units':'mm','page':[210,297],'aruco':{'dictionary':'DICT_4X4_50','size':MK,'markers':{str(k):{'origin':v,'position':['TL','TR','BR','BL'][k]} for k,v in MARKERS.items()}},'dropoutColor':BLUE,'sheets':layouts}
 json.dump(meta,open(f'jaguk-template-layout-v{V}.json','w'),ensure_ascii=False,indent=1)

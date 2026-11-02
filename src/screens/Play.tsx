@@ -4,15 +4,18 @@ import type { BuildOptions, BuildResult } from '../engine/build'
 import { cleanSuppChars, makeSupplementPdf } from '../engine/supplement'
 import { SUPP_BASE, SUPP_MAX } from '../engine/template'
 import { SaveDeclined, saveFile } from '../platform'
+import type { Bitmap } from '../engine/bitmap'
+import { GlyphEditor } from '../ui/GlyphEditor'
 
 const SAMPLE = '다람쥐 헌 쳇바퀴에 타고파.\n오늘 하루도 수고했어요. 내일은 더 맑을 거예요.'
 const COMMON = '가나다라마바사아자차카타파하강남동서울김이박최정민수영희진호준우현지은서윤도시학교선생님친구사랑행복감사편지바람구름하늘별달꽃나무물불땅길집문창책글말눈귀손발몸맘봄여름가을겨울아침점심저녁밤낮시간오늘내일어제주말공부시험숙제급식운동놀이그림노래춤'
 
 const WEIGHT_LABEL: Record<number, string> = { [-3]: '아주 가늘게', [-2]: '가늘게', [-1]: '조금 가늘게', 0: '쓴 그대로', 1: '조금 굵게', 2: '굵게', 3: '굵게', 4: '아주 굵게', 5: '아주 굵게', 6: '가장 굵게' }
 
-export function PlayScreen({ result, flagged, settings, rebuilding, supps, onFlag, onRebuild, onSupp, onCapture, onNext, onRedo }: {
-  result: BuildResult; flagged: string[]; settings: BuildOptions; rebuilding: number | null; supps: Record<number, string[]>
+export function PlayScreen({ result, flagged, settings, rebuilding, supps, edits, onFlag, onRebuild, onSupp, onEdit, onCapture, onNext, onRedo }: {
+  result: BuildResult; flagged: string[]; settings: BuildOptions; rebuilding: number | null; supps: Record<number, string[]>; edits: Record<string, Bitmap>
   onFlag: (f: string[]) => void; onRebuild: (s: BuildOptions) => void; onSupp: (s: Record<number, string[]>) => void
+  onEdit: (ch: string, bm: Bitmap | null) => void
   onCapture: () => void; onNext: () => void; onRedo: () => void
 }) {
   const [text, setText] = useState(SAMPLE)
@@ -21,6 +24,18 @@ export function PlayScreen({ result, flagged, settings, rebuilding, supps, onFla
   const [extra, setExtra] = useState('')
   const [suppMsg, setSuppMsg] = useState<string | null>(null)
   const [making, setMaking] = useState(false)
+  const [editCh, setEditCh] = useState('')
+  const [editing, setEditing] = useState<string | null>(null)
+  const [editMsg, setEditMsg] = useState<string | null>(null)
+  const openEditor = (raw: string) => {
+    const ch = [...raw.trim()][0]
+    if (!ch) return
+    const cp = ch.codePointAt(0)!
+    const ok = (cp >= 0xac00 && cp <= 0xd7a3) || (cp >= 0x21 && cp <= 0x7e)
+    if (!ok) { setEditMsg('한글 완성형 글자와 영문·숫자·기호만 손볼 수 있어요.'); return }
+    setEditMsg(null); setEditing(ch)
+  }
+  const editedChars = Object.keys(edits)
   // 직접 쓰지 않은(=조합된) 흔한 글자에서 40자를 골라 어색한 글자 찾기
   const odd = useMemo(() => {
     const pool = [...new Set(COMMON)].filter((c) => !result.directChars.includes(c))
@@ -87,6 +102,32 @@ export function PlayScreen({ result, flagged, settings, rebuilding, supps, onFla
       <div className="odd-grid">
         {odd.map((c) => <button key={c} aria-pressed={flagged.includes(c)} onClick={() => toggle(c)}>{c}</button>)}
       </div>
+
+      <section className="fix" aria-label="글자 하나씩 손보기">
+        <h3>글자 하나씩 손보기</h3>
+        <p className="note">어색한 글자를 화면에서 펜으로 바로 고쳐요. 위에서 표시한 글자를 누르거나 고칠 글자를 적으세요. 고친 글자는 굵기를 바꿔도 그대로예요.</p>
+        <div className="fix-row">
+          <input value={editCh} maxLength={2} onChange={(e) => setEditCh(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') openEditor(editCh) }} placeholder="예: 쳇" aria-label="손볼 글자" />
+          <button className="btn" onClick={() => openEditor(editCh)} disabled={!editCh.trim() || rebuilding != null}>이 글자 손보기</button>
+        </div>
+        {flagged.length > 0 && (
+          <div className="chips" aria-label="표시한 글자">
+            {flagged.map((c) => <button key={c} className="chip" onClick={() => openEditor(c)} disabled={rebuilding != null}>{c}</button>)}
+          </div>
+        )}
+        {editedChars.length > 0 && (
+          <p className="note">손본 글자 {editedChars.length}개: {editedChars.map((c) => <button key={c} className="linkish fix-done" onClick={() => openEditor(c)}>{c}</button>)}</p>
+        )}
+        {editMsg && <p className="note" role="status">{editMsg}</p>}
+      </section>
+      {editing && (
+        <GlyphEditor
+          ch={editing} result={result} existing={edits[editing]}
+          onSave={(bm) => { onEdit(editing, bm); setEditing(null); setEditMsg(`‘${editing}’ 글자를 고쳤어요. 폰트를 다시 만들고 있어요.`) }}
+          onRevert={edits[editing] ? () => { onEdit(editing, null); setEditing(null); setEditMsg(`‘${editing}’ 글자를 손보기 전으로 되돌렸어요.`) } : undefined}
+          onClose={() => setEditing(null)}
+        />
+      )}
 
       <section className="supp" aria-label="보충 시트">
         <div>

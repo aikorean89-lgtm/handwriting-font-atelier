@@ -8,7 +8,7 @@ export const FLOW: { step: Step; n: string; label: string }[] = [
   { step: 'review', n: '04', label: '다듬기' },
   { step: 'build', n: '05', label: '완성' },
 ]
-const GROUP: Record<Step, number> = { home: -1, tier: 0, template: 1, capture: 2, review: 3, jamo: 3, build: 4, play: 4, export: 4, gallery: -1 }
+const GROUP: Record<Step, number> = { home: -1, tier: 0, template: 1, capture: 2, draw: 2, review: 3, jamo: 3, build: 4, play: 4, export: 4, gallery: -1 }
 
 export function TopBar({ step, onHome, onGallery }: { step: Step; onHome: () => void; onGallery: () => void }) {
   const g = GROUP[step]

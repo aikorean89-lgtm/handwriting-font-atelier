@@ -427,3 +427,78 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .gdetail .waterfall p { font-family: inherit; }
 .gdetail-img { width: 100%; border: 1px solid var(--line); display: block; margin-bottom: 16px; }
 @media (max-width: 600px) { .gdetail { padding: 16px; } .gdetail-head h2 { font-size: 26px; } }
+
+/* ── v1.4: 갤러리 좋아요·태그·잠금, 설치 안내, 웹폰트 ─────────── */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip:hover:not(:disabled) { border-color: var(--text); color: var(--text); }
+.chip.on { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
+.chip:disabled { opacity: 0.4; cursor: not-allowed; }
+.chip .count { font-size: 12px; opacity: 0.7; }
+.tag-filter { margin: -4px 0 20px; }
+.tag-field { display: grid; gap: 10px; margin: 12px 0 8px; }
+.tag-field .note { margin: 0; }
+.seg { display: inline-flex; border: 1px solid var(--line-strong); flex-shrink: 0; }
+.seg button { height: 42px; padding: 0 14px; border: 0; background: var(--surface); color: var(--text-3); font-size: 14px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line-strong); }
+.seg button[aria-pressed='true'] { background: var(--text); color: var(--bg); font-weight: 600; }
+@media (max-width: 560px) { .gallery-tools { flex-wrap: wrap; } .gallery-tools input { flex-basis: 100%; max-width: none; } }
+.gcard-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 0; }
+.gcard-tags i { font-style: normal; font-size: 12px; color: var(--text-2); background: var(--surface-2); padding: 2px 7px; }
+.gcard .like { position: absolute; right: 12px; bottom: 14px; }
+.gcard-meta { padding-right: 76px !important; }
+.like { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--text-2); cursor: pointer; font-size: 14px; }
+.like:hover { border-color: var(--seal); color: var(--seal); }
+.like.on { color: var(--seal); border-color: var(--seal); background: color-mix(in srgb, var(--seal) 7%, var(--surface)); }
+.like.big { height: 36px; padding: 0 12px; }
+.gdetail-head .row { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.mod-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 10px 14px; margin: 0 0 20px; border: 1px dashed var(--line-strong); font-size: 14px; color: var(--text-2); }
+.mod-bar span { flex: 1 1 260px; }
+.mod-bar.open { border: 1.5px solid var(--seal); color: var(--seal); background: color-mix(in srgb, var(--seal) 5%, var(--surface)); }
+.guide { margin-top: 40px; }
+.guide h2 { font-family: var(--font-display); font-size: 26px; letter-spacing: -0.02em; margin: 0; }
+.guide .tabs { margin-top: 12px; }
+.guide .tab-body ul { padding-left: 20px; margin: 8px 0 0; }
+.gdetail .guide { margin-top: 24px; }
+.webfont p { margin: 0 0 12px; }
+.webfont ol { margin: 12px 0; }
+.code-wrap { position: relative; }
+.code-wrap .code { margin: 0; padding-right: 96px; }
+.code-wrap .btn { position: absolute; top: 8px; right: 8px; }
+
+/* ── 펜 판 ─────────────────────────────────── */
+.drawpad { display: grid; gap: 12px; justify-items: center; }
+.drawpad-surface { position: relative; width: min(100%, 440px); aspect-ratio: 1; background: #fff; border: 1.5px solid #8ec5ff; }
+.drawpad-surface.guide::before, .drawpad-surface.guide::after { content: ''; position: absolute; pointer-events: none; }
+.drawpad-surface.guide::before { left: 50%; top: 12%; bottom: 12%; border-left: 1.5px dashed #8ec5ff; }
+.drawpad-surface.guide::after { top: 50%; left: 12%; right: 12%; border-top: 1.5px dashed #8ec5ff; }
+.drawpad canvas { position: relative; z-index: 1; display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; -webkit-user-select: none; user-select: none; }
+.drawpad-tools { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
+.drawpad-tools .seg button { height: 38px; }
+.fix { margin: 40px 0 0; }
+.fix h3 { font-family: var(--font-display); font-size: 24px; margin: 0 0 6px; }
+.fix-row { display: flex; gap: 10px; margin: 12px 0; flex-wrap: wrap; }
+.fix-row input { width: 120px; height: 56px; border: 1px solid var(--line-strong); background: var(--surface); padding: 0 14px; font-size: 24px; text-align: center; }
+.fix .chips { margin: 4px 0 8px; }
+.fix-done { margin: 0 4px; font-size: 18px; }
+.gdetail.editor { width: min(560px, calc(100vw - 24px)); }
+
+/* ── 화면에 직접 쓰기 ─────────────────────── */
+.draw-top { margin: 8px 0 20px; }
+.draw-progress { font-size: 15px; color: var(--text-2); max-width: 440px; }
+.draw-progress b { font-size: 22px; color: var(--text); }
+.draw-stage { display: grid; gap: 14px; justify-items: center; }
+.draw-target { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: center; }
+.draw-char { font-family: var(--font-ui, inherit); font-size: 56px; line-height: 1; font-weight: 700; min-width: 1.2em; text-align: center; }
+.draw-nav { justify-content: center; margin-top: 0; }
+.draw-all { margin: 32px 0 0; }
+.draw-all summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
+.draw-all .odd-grid button { font-size: 26px; font-family: inherit; }
+.draw-all .odd-grid button[aria-pressed='true'] { background: color-mix(in srgb, var(--ok, #2f8a73) 14%, var(--surface)); color: var(--text); }
+.draw-all .odd-grid button.here { outline: 2px solid var(--seal); outline-offset: -2px; z-index: 1; position: relative; }
+.draw-cta { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
+.draw-cta p { margin: 0 0 12px; color: var(--text-2); }
+.gcard > button.like { position: absolute; right: 12px; bottom: 14px; display: inline-flex; width: auto; align-items: center; gap: 5px; height: 32px; padding: 0 10px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--text-2); }
+.gcard > button.like:hover { border-color: var(--seal); color: var(--seal); }
+.gcard > button.like.on { color: var(--seal); border-color: var(--seal); background: color-mix(in srgb, var(--seal) 7%, var(--surface)); }
+.gdetail-head > .btn, .gdetail-head .row .btn { white-space: nowrap; flex-shrink: 0; }
+.draw-finish { margin-top: 28px; }

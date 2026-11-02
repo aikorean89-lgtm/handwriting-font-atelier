@@ -8,7 +8,7 @@ import { isHangul } from './engine/hangul'
 import { ensureRefFont } from './engine/refmask'
 import { SEG_VERSION, segmentScored } from './engine/segment'
 
-export type Step = 'home' | 'tier' | 'template' | 'capture' | 'review' | 'jamo' | 'build' | 'play' | 'export' | 'gallery'
+export type Step = 'home' | 'tier' | 'template' | 'capture' | 'draw' | 'review' | 'jamo' | 'build' | 'play' | 'export' | 'gallery'
 
 export interface Cell {
   index: number
@@ -20,7 +20,7 @@ export interface Cell {
   labelsEdited?: boolean
   segCost?: number // 자동 분리 비용 (높을수록 의심)
 }
-export interface Sheet { no: number; ver?: number /* 템플릿 버전, 없으면 v1 */; preview: string; sharpness: number; capturedAt: number; cells: Cell[] }
+export interface Sheet { no: number; ver?: number /* 템플릿 버전, 없으면 v1 */; drawn?: boolean /* 화면에 직접 쓴 시트 */; preview: string; sharpness: number; capturedAt: number; cells: Cell[] }
 export interface Project {
   tier: Tier
   fontName: string
@@ -31,6 +31,7 @@ export interface Project {
   settings?: BuildOptions // 굵기·자간
   supps?: Record<number, string[]> // 만든 보충 시트 (시트 번호 → 글자)
   segVersion?: number // 자동 자모 분리를 한 방식의 버전
+  edits?: Record<string, Bitmap> // 글자 손보기로 직접 고친 글자 (폰트를 만들 때 가장 나중에 덮어쓴다)
 }
 
 export function newProject(tier: Tier): Project {
@@ -58,7 +59,7 @@ export async function resegment(p: Project, onProgress?: (done: number, total: n
 export function needsResegment(p: Project): boolean { return (p.segVersion ?? 1) < SEG_VERSION && Object.keys(p.sheets).length > 0 }
 
 interface StoredCell { index: number; char: string | null; state: CellState; include: boolean; w: number; bits: Uint8Array; labels?: Uint8Array; labelsEdited?: boolean; segCost?: number }
-interface StoredProject extends Omit<Project, 'sheets'> { sheets: Record<number, Omit<Sheet, 'cells'> & { cells: StoredCell[] }> }
+interface StoredProject extends Omit<Project, 'sheets' | 'edits'> { sheets: Record<number, Omit<Sheet, 'cells'> & { cells: StoredCell[] }>; edits?: Record<string, { w: number; bits: Uint8Array }> }
 
 const KEY = 'jaguk.project.v1'
 
@@ -83,6 +84,7 @@ export async function saveProject(p: Project) {
         labels: c.labels ? pack2(c.labels) : undefined, labelsEdited: c.labelsEdited, segCost: c.segCost,
       })),
     }])),
+    edits: p.edits ? Object.fromEntries(Object.entries(p.edits).map(([ch, bm]) => [ch, { w: bm.w, bits: packBits(bm.data) }])) : undefined,
   }
   try { await set(KEY, sp) } catch { /* 저장 공간 부족 시 무시: 화면 작업은 계속 */ }
 }
@@ -105,6 +107,7 @@ export async function loadProject(): Promise<Project | null> {
           }
         }),
       }])),
+      edits: sp.edits ? Object.fromEntries(Object.entries(sp.edits).map(([ch, e]) => [ch, { w: e.w, h: e.w, data: unpackBits(e.bits, e.w * e.w) }])) : undefined,
     }
   } catch { return null }
 }
@@ -117,7 +120,9 @@ export function allCells(p: Project): Cell[] {
 
 /** 폰트에 넣을 칸 (보충 시트는 번호가 커서 뒤에 오고, 같은 글자면 뒤의 것이 이긴다) */
 export function buildCells(p: Project): BuildCell[] {
-  return allCells(p).filter((c) => c.include && c.char).map((c) => ({ index: c.index, char: c.char!, bitmap: c.bitmap, labels: c.labels, segCost: c.segCost, edited: c.labelsEdited }))
+  const cells: BuildCell[] = allCells(p).filter((c) => c.include && c.char).map((c) => ({ index: c.index, char: c.char!, bitmap: c.bitmap, labels: c.labels, segCost: c.segCost, edited: c.labelsEdited }))
+  for (const [ch, bm] of Object.entries(p.edits ?? {})) cells.push({ index: -2, char: ch, bitmap: bm, raw: true })
+  return cells
 }
 
 export function suppNos(p: Project): number[] {

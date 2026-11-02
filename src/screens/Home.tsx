@@ -10,7 +10,7 @@ const QUICK_CHARS = LAYOUT.sheets[0].cells.map((c) => c.char ?? '').join('')
 
 export function Home({ work, onStartNew, onResume, onGallery }: { work: Project | null; onStartNew: () => void; onResume: () => void; onGallery: () => void }) {
   const [confirm, setConfirm] = useState(false)
-  // 빠른 폰트 90자가 11,172자 중 어디에 놓이는지 보여주는 모자이크
+  // 빠른 모드 90자가 11,172자 중 어디에 놓이는지 보여주는 모자이크
   const direct = useMemo(() => new Set([...QUICK_CHARS].map((c) => c.codePointAt(0)! - 0xac00)), [])
   const sheets = work ? Object.keys(work.sheets).length : 0
   const total = work ? TIERS[work.tier].sheets.length : 0
@@ -24,7 +24,7 @@ export function Home({ work, onStartNew, onResume, onGallery }: { work: Project 
               {work && (
                 <div className="resume" role="region" aria-label="만들던 폰트">
                   <p>
-                    <b>{TIERS[work.tier].label}</b>를 만드는 중이에요.{' '}
+                    <b>{TIERS[work.tier].label}</b>로 폰트를 만드는 중이에요.{' '}
                     {sheets > 0 ? `시트 ${total}장 중 ${sheets}장을 찍었어요.` : '아직 시트를 찍지 않았어요.'}
                   </p>
                   {!confirm ? (
@@ -72,7 +72,7 @@ export function Home({ work, onStartNew, onResume, onGallery }: { work: Project 
           </section>
 
           <section className="how" aria-label="만드는 순서">
-            <div><b>01</b><h3>고르기</h3><p>빠른 폰트(1장) 또는 표준 폰트(4장)</p></div>
+            <div><b>01</b><h3>고르기</h3><p>빠른 모드(1장) 또는 일반 모드(4장)</p></div>
             <div><b>02</b><h3>쓰기</h3><p>칸 위 글자를 평소 글씨로 따라 쓰기</p></div>
             <div><b>03</b><h3>찍기</h3><p>네 모서리 마커가 보이게 촬영</p></div>
             <div><b>04</b><h3>다듬기</h3><p>잘못 잘린 칸과 자모만 고치기</p></div>

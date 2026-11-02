@@ -2,7 +2,7 @@ import { Head } from '../ui/common'
 import { TIERS, type Tier } from '../engine/template'
 import { TemplateButton } from '../ui/TemplateButton'
 
-export function TemplateScreen({ tier, onNext }: { tier: Tier; onNext: () => void }) {
+export function TemplateScreen({ tier, onNext, onDraw }: { tier: Tier; onNext: () => void; onDraw: () => void }) {
   const t = TIERS[tier]
   return (
     <main className="wrap screen">
@@ -11,7 +11,7 @@ export function TemplateScreen({ tier, onNext }: { tier: Tier; onNext: () => voi
       </Head>
       <div className="tpl">
         <div className="tpl-sheet">
-          <img src={`${import.meta.env.BASE_URL}template/sheet-1.png`} alt="빠른 폰트 시트 미리보기: 네 모서리에 검은 마커, 하늘색 칸 100개" />
+          <img src={`${import.meta.env.BASE_URL}template/sheet-1.png`} alt="빠른 모드 시트 미리보기: 네 모서리에 검은 마커, 하늘색 칸 100개" />
         </div>
         <div>
           <ol className="tips">
@@ -20,11 +20,15 @@ export function TemplateScreen({ tier, onNext }: { tier: Tier; onNext: () => voi
             <li><div><b>하늘색 십자 가운데에</b><span>칸 밖으로 나가지 않게 쓰세요. 하늘색 선은 찍은 뒤 자동으로 지워집니다.</span></div></li>
             <li><div><b>초성·중성·종성은 살짝 띄우기</b><span>획이 붙지 않으면 자모를 더 정확히 나눕니다.</span></div></li>
             <li><div><b>틀린 칸은 ○를 칠하기</b><span>칠한 칸은 건너뛰고, 그 글자는 다른 글씨에서 조합합니다.</span></div></li>
-            <li><div><b>겹받침 글자도 모양만</b><span>표준 시트의 넋, 핥 같은 글자는 겹받침 모양을 얻기 위한 글자예요.</span></div></li>
+            <li><div><b>겹받침 글자도 모양만</b><span>일반 모드 시트의 넋, 핥 같은 글자는 겹받침 모양을 얻기 위한 글자예요.</span></div></li>
           </ol>
           <div className="actions">
             <TemplateButton label="템플릿 PDF 받기" />
             <button className="btn primary" onClick={onNext}>다 썼어요, 찍으러 가기</button>
+          </div>
+          <div className="draw-cta">
+            <p><b>프린터가 없나요?</b> 태블릿이나 휴대폰 화면에 펜·손가락으로 칸마다 바로 쓸 수도 있어요.</p>
+            <button className="btn gallery-cta" onClick={onDraw}>종이 없이 화면에 쓰기</button>
           </div>
           <p className="note">{t.label}: A4 {t.sheets.length}장, 쓰는 데 약 {t.minutes}분</p>
         </div>

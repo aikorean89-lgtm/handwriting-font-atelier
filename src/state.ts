@@ -4,6 +4,9 @@ import { type Bitmap, packBits, unpackBits } from './engine/bitmap'
 import { type CellState } from './engine/sheet'
 import { type Tier, SUPP_BASE, registerSupplement } from './engine/template'
 import type { BuildCell, BuildOptions } from './engine/build'
+import { isHangul } from './engine/hangul'
+import { ensureRefFont } from './engine/refmask'
+import { SEG_VERSION, segmentScored } from './engine/segment'
 
 export type Step = 'home' | 'tier' | 'template' | 'capture' | 'review' | 'jamo' | 'build' | 'play' | 'export' | 'gallery'
 
@@ -27,11 +30,32 @@ export interface Project {
   updatedAt: number
   settings?: BuildOptions // 굵기·자간
   supps?: Record<number, string[]> // 만든 보충 시트 (시트 번호 → 글자)
+  segVersion?: number // 자동 자모 분리를 한 방식의 버전
 }
 
 export function newProject(tier: Tier): Project {
-  return { tier, fontName: '', sheets: {}, step: 'template', flagged: [], updatedAt: Date.now() }
+  return { tier, fontName: '', sheets: {}, step: 'template', flagged: [], updatedAt: Date.now(), segVersion: SEG_VERSION }
 }
+
+/** 예전 방식으로 나눈 자모를 새 방식으로 다시 나눈다 (사용자가 손으로 고친 글자는 그대로) */
+export async function resegment(p: Project, onProgress?: (done: number, total: number) => void): Promise<Project> {
+  const todo = allCells(p).filter((c) => c.include && c.char && isHangul(c.char) && !c.labelsEdited)
+  await ensureRefFont(todo.map((c) => c.char).join(''))
+  const fresh = new Map<number, { labels: Uint8Array; segCost: number }>()
+  for (let i = 0; i < todo.length; i++) {
+    const c = todo[i]
+    const r = segmentScored(c.bitmap, c.char!)
+    fresh.set(c.index, { labels: r.labels, segCost: r.cost })
+    if (i % 8 === 0) { onProgress?.(i, todo.length); await new Promise((res) => setTimeout(res, 0)) }
+  }
+  onProgress?.(todo.length, todo.length)
+  const sheets = Object.fromEntries(Object.entries(p.sheets).map(([k, s]) => [k, {
+    ...s, cells: s.cells.map((c) => { const f = fresh.get(c.index); return f ? { ...c, ...f } : c }),
+  }]))
+  return { ...p, sheets, segVersion: SEG_VERSION }
+}
+
+export function needsResegment(p: Project): boolean { return (p.segVersion ?? 1) < SEG_VERSION && Object.keys(p.sheets).length > 0 }
 
 interface StoredCell { index: number; char: string | null; state: CellState; include: boolean; w: number; bits: Uint8Array; labels?: Uint8Array; labelsEdited?: boolean; segCost?: number }
 interface StoredProject extends Omit<Project, 'sheets'> { sheets: Record<number, Omit<Sheet, 'cells'> & { cells: StoredCell[] }> }

@@ -10,7 +10,7 @@ import { BuildScreen } from './screens/Build'
 import { PlayScreen } from './screens/Play'
 import { ExportScreen } from './screens/Export'
 import { GalleryScreen } from './screens/Gallery'
-import { type Cell, type Project, type Sheet, type Step, buildCells, clearProject, loadProject, newProject, saveProject } from './state'
+import { type Cell, type Project, type Sheet, type Step, buildCells, clearProject, loadProject, needsResegment, newProject, resegment, saveProject } from './state'
 import { type BuildOptions, type BuildResult, buildFont } from './engine/build'
 import { SUPP_BASE, sheetDef } from './engine/template'
 import { isHangul } from './engine/hangul'
@@ -24,6 +24,7 @@ export default function App() {
   const [saved, setSaved] = useState<Project | null>(null)
   const [step, setStep] = useState<Step>(() => (location.hash.startsWith('#gallery') ? 'gallery' : 'home'))
   const [rebuilding, setRebuilding] = useState<number | null>(null)
+  const [reseg, setReseg] = useState<{ done: number; total: number } | null>(null)
   const [result, setResult] = useState<BuildResult | null>(null)
   const saveTimer = useRef(0)
 
@@ -118,6 +119,18 @@ export default function App() {
   const lastStep = useRef<Step>('template')
   const goHome = () => { if (step !== 'home') lastStep.current = step; go('home') }
 
+  // 예전 방식으로 나눈 자모는 다듬기·만들기 전에 새 방식으로 다시 나눈다
+  const segStep = step === 'review' || step === 'jamo' || step === 'build' || step === 'play' || step === 'export'
+  useEffect(() => {
+    if (!project || !segStep || reseg || !needsResegment(project)) return
+    setReseg({ done: 0, total: 1 })
+    resegment(project, (done, total) => setReseg({ done, total })).then((p) => {
+      setProject((cur) => (cur ? { ...p, flagged: cur.flagged, fontName: cur.fontName, settings: cur.settings, supps: cur.supps } : p))
+      setResult(null)
+      setReseg(null)
+    }).catch(() => setReseg(null))
+  }, [project, segStep, reseg])
+
   let screen: React.ReactNode = null
   if (step === 'gallery') {
     screen = <GalleryScreen onMake={() => go(project || saved ? 'home' : 'tier')} />
@@ -139,6 +152,16 @@ export default function App() {
     )
   } else if (step === 'tier') {
     screen = <TierScreen initial={project?.tier} onPick={(t) => { setProject((p) => (p ? { ...p, tier: t } : newProject(t))); go('template') }} />
+  } else if (project && segStep && (reseg || needsResegment(project))) {
+    screen = (
+      <main className="wrap screen">
+        <div className="panel" role="status" aria-live="polite">
+          <b>자모 나누기를 더 정확한 새 방식으로 다시 하고 있어요</b>
+          <p className="note">찍은 사진은 그대로예요. 손으로 고친 글자는 건드리지 않아요. {reseg ? `${reseg.done} / ${reseg.total}` : ''}</p>
+          <div className="engine-bar" aria-hidden><i style={{ width: `${reseg ? Math.round((reseg.done / Math.max(1, reseg.total)) * 100) : 0}%` }} /></div>
+        </div>
+      </main>
+    )
   } else if (project) {
     if (step === 'template') screen = <TemplateScreen tier={project.tier} onNext={() => go('capture')} />
     if (step === 'capture') screen = <CaptureScreen project={project} onSheet={onSheet} onNext={() => go('review')} />

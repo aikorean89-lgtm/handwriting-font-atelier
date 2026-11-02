@@ -6,6 +6,7 @@ import {
 } from './hangul'
 import { LABEL } from './segment'
 import { REF, refMasks } from './refmask'
+import { type Desc, chamfer, describe, median } from './consensus'
 
 export interface SourceCell { index: number; char: string; bitmap: Bitmap; labels: Uint8Array; segCost?: number; edited?: boolean }
 
@@ -22,6 +23,10 @@ export interface Sample {
   want: number
   cost: number // 0 = 사용자가 고침 / 확실
   isRef?: boolean
+  edited?: boolean
+  cons?: number // 같은 자모의 다른 샘플들과의 모양 거리 (작을수록 전형적)
+  outlier?: boolean // 다른 샘플들과 모양이 달라 잘못 잘렸을 가능성이 큼
+  strong?: boolean // 사람에게 확인을 부탁할 만큼 크게 다름
 }
 
 export interface Part { sample: Sample; sx: number; sy: number; dx: number; dy: number }
@@ -77,14 +82,49 @@ export class Library {
         const box = { x: b.x / N, y: b.y / N, w: b.w / N, h: b.h / N }
         const s: Sample = {
           key: `${c.index}:${slot}`, slot, jamo: jamoIndex(slot, syl), variant: variantOf(slot, syl), syl,
-          hasJong: syl.jong > 0, box, bitmap: c.bitmap, mask: c.labels, want, cost: c.edited ? 0 : (c.segCost ?? 0.4),
+          hasJong: syl.jong > 0, box, bitmap: c.bitmap, mask: c.labels, want, cost: c.edited ? 0 : (c.segCost ?? 0.4), edited: !!c.edited,
         }
         this.samples.push(s)
         this.addStat(geomKey(slot, syl), box)
         if (slot === 'jung') this.addStat(jungClassKey(syl), box)
       }
     }
+    this.scoreConsensus()
   }
+
+  /** 같은 자모끼리 모양을 비교해 튀는 샘플(획을 빼앗기거나 더 가져간 것)을 표시한다 */
+  private scoreConsensus() {
+    const groups = new Map<string, Sample[]>()
+    for (const s of this.samples) {
+      const k = `${s.slot}:${s.jamo}`
+      const g = groups.get(k)
+      if (g) g.push(s); else groups.set(k, [s])
+    }
+    for (const g of groups.values()) {
+      const ds = g.map((s) => describe(s.bitmap, s.mask, s.want))
+      const refs = g.map((s) => refDesc(s))
+      g.forEach((s, i) => {
+        const di = ds[i]
+        if (!di) { s.cons = 9; return }
+        const others: number[] = []
+        g.forEach((_, j) => { if (j !== i && ds[j]) others.push(chamfer(di, ds[j]!)) })
+        const rd = refs[i] ? chamfer(di, refs[i]!) : null
+        // 사람 손글씨끼리 비교가 기준 글꼴보다 믿을 만하다. 비교 상대가 적으면 기준 글꼴을 함께 본다
+        if (others.length >= 3) s.cons = median(others)
+        else s.cons = median(rd != null ? [...others, rd * 0.8] : others.length ? others : [1.5])
+      })
+      const m = median(g.map((s) => s.cons!))
+      for (const s of g) {
+        if (s.edited) { s.outlier = false; continue }
+        const c = s.cons!
+        s.outlier = (g.length >= 3 && c > Math.max(m * 1.45, m + 0.55)) || c > 2.6
+        s.strong = (g.length >= 3 && c > Math.max(m * 2, m + 1.1)) || c > 3.2
+      }
+    }
+  }
+
+  /** 시험·화면용: 튀는 샘플 목록 */
+  outliers(strongOnly = false): Sample[] { return this.samples.filter((s) => (strongOnly ? s.strong : s.outlier)) }
 
   private addStat(k: string, b: Box) {
     const s = this.stats.get(k) ?? { x: 0, y: 0, w: 0, h: 0, n: 0 }
@@ -131,29 +171,26 @@ export class Library {
     const v = variantOf(slot, tgt)
     const order = slot === 'cho' ? CHO_FALLBACK[v] : slot === 'jung' ? JUNG_FALLBACK[v] : JONG_FALLBACK[v]
     const wantJong = tgt.jong > 0
-    const confident = cands.filter((s) => s.cost <= 0.62)
-    const use = confident.length ? confident : cands
-    for (const ov of order) {
-      let pool = use.filter((s) => s.variant === ov)
-      if (slot === 'jung') {
-        const same = pool.filter((s) => s.hasJong === wantJong)
-        if (same.length) pool = same
-      }
-      if (pool.length) return this.mostTypical(pool)
-    }
-    return this.mostTypical(use)
-  }
-
-  private mostTypical(pool: Sample[]): Sample {
-    if (pool.length === 1) return pool[0]
-    let best = pool[0], bd = Infinity
-    for (const s of pool) {
-      const m = this.measured(geomKey(s.slot, s.syl))
-      if (!m) continue
-      const d = Math.abs(s.box.w - m.w) + Math.abs(s.box.h - m.h) + Math.abs(s.box.x - m.x) + Math.abs(s.box.y - m.y) + 0.8 * s.cost
-      if (d < bd) { bd = d; best = s }
+    // 다른 샘플과 모양이 다른 것은 빼고, 남는 게 없을 때만 쓴다
+    const sane = cands.filter((s) => !s.outlier)
+    const use = sane.length ? sane : cands
+    // 같은 꼴(벌)에서 온 샘플을 우선하되, 모양이 덜 전형적이면 다른 꼴의 깨끗한 샘플을 옮겨 쓴다
+    let best = use[0], bs = Infinity
+    for (const s of use) {
+      const rank = order.indexOf(s.variant)
+      let score = 0.3 * (rank < 0 ? order.length : rank) + 1.5 * (s.cons ?? 1) + 0.5 * s.cost + contextPenalty(s) + this.deviation(s)
+      if (slot === 'jung' && s.hasJong !== wantJong) score += 0.15
+      if (s.edited) score -= 0.3
+      if (score < bs) { bs = score; best = s }
     }
     return best
+  }
+
+  /** 같은 문맥 평균 위치·크기에서 벗어난 정도 */
+  private deviation(s: Sample): number {
+    const m = this.measured(geomKey(s.slot, s.syl))
+    if (!m) return 0
+    return Math.abs(s.box.w - m.w) + Math.abs(s.box.h - m.h) + Math.abs(s.box.x - m.x) + Math.abs(s.box.y - m.y)
   }
 
   private place(sample: Sample, slot: Slot, tgt: Syl, into?: Box): Part {
@@ -241,3 +278,25 @@ export class Library {
 }
 
 function clamp(v: number, a: number, b: number) { return Math.max(a, Math.min(b, v)) }
+
+// ㅓ·ㅕ·ㅔ·ㅖ는 짧은 획이 초성 쪽으로 붙어 나오기 쉬워, 그 글자에서 뽑은 초성은 덜 믿는다
+const LEFT_TICK = new Set([4, 5, 6, 7])
+function contextPenalty(s: Sample): number {
+  if (s.slot === 'cho' && LEFT_TICK.has(s.syl.jung)) return 0.35
+  return 0
+}
+
+const refDescCache = new Map<string, Desc | null>()
+function refDesc(s: Sample): Desc | null {
+  const ch = compose(s.syl)
+  const k = `${ch}:${s.slot}`
+  if (refDescCache.has(k)) return refDescCache.get(k)!
+  let d: Desc | null = null
+  try {
+    const m = refMasks(ch)
+    const mask = s.slot === 'jong' ? m.slot.jong : m.slot[s.slot]
+    if (mask) d = describe({ w: REF, h: REF, data: m.all }, mask, 1)
+  } catch { d = null }
+  refDescCache.set(k, d)
+  return d
+}

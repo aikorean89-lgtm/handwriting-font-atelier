@@ -1,8 +1,17 @@
 // 손글씨 음절 비트맵 → 초(1)·중(2)·종(3) 라벨 지도
 import { type Bitmap, components, dilate, distanceTo, inkBox } from './bitmap'
 import { REF, refMasks } from './refmask'
+import { strokeUnits } from './strokes'
 
 export const LABEL = { cho: 1, jung: 2, jong: 3 } as const
+/** 자모 나누기 방식이 바뀌면 올린다. 저장된 프로젝트의 자동 분리를 새 방식으로 다시 한다 */
+export const SEG_VERSION = 2
+let VOTE_W = 0.5
+export function setVoteWeight(v: number) { VOTE_W = v }
+let REFINE = true
+let REFINE_ABOVE = 0.62
+export function setRefineAbove(v: number) { REFINE_ABOVE = v }
+export function setRefine(v: boolean) { REFINE = v }
 export const segDebug: { on: boolean; log: string[] } = { on: false, log: [] }
 
 const dtCache = new Map<string, (Float32Array | null)[]>()
@@ -43,16 +52,19 @@ export function segmentScored(bm: Bitmap, ch: string): { labels: Uint8Array; cos
   const refBox: B[] = [], refFrac: number[] = []
   let refTot = 0
   const refCnt = [0, 0, 0]
+  // 기준 자모 상자는 양 끝 1.5%를 버리고 잡는다 (기준 지도의 작은 부스러기 하나가 상자를 크게 늘리지 않게)
+  const q = (a: number[], f: number) => a[Math.min(a.length - 1, Math.max(0, Math.round((a.length - 1) * f)))]
   for (let k = 0; k < nSlots; k++) {
     const m = slotMasks[k]!
-    let x0 = 1, y0 = 1, x1 = 0, y1 = 0
+    const xs: number[] = [], ys: number[] = []
     for (let y = 0; y < REF; y++) for (let x = 0; x < REF; x++) {
       if (!m[y * REF + x]) continue
       refCnt[k]++
-      const nx = (x - ref.box.x) / ref.box.w, ny = (y - ref.box.y) / ref.box.h
-      x0 = Math.min(x0, nx); y0 = Math.min(y0, ny); x1 = Math.max(x1, nx); y1 = Math.max(y1, ny)
+      xs.push((x - ref.box.x) / ref.box.w); ys.push((y - ref.box.y) / ref.box.h)
     }
-    refBox.push({ x0, y0, x1, y1 }); refTot += refCnt[k]
+    xs.sort((a, b) => a - b); ys.sort((a, b) => a - b)
+    refBox.push(xs.length ? { x0: q(xs, 0.015), y0: q(ys, 0.015), x1: q(xs, 0.985), y1: q(ys, 0.985) } : { x0: 1, y0: 1, x1: 0, y1: 0 })
+    refTot += refCnt[k]
   }
   for (let k = 0; k < nSlots; k++) refFrac.push(refCnt[k] / Math.max(1, refTot))
 
@@ -196,6 +208,102 @@ export function segmentScored(bm: Bitmap, ch: string): { labels: Uint8Array; cos
       if (md < bd) { bd = md; bc = c }
     }
     if (bc > 0) for (let i = 0; i < labels.length; i++) if (comp[i] === bc) labels[i] = k
+  }
+
+  // ── 획 조각 단위로 다시 다듬기 ──
+  // 붙여 쓴 글씨는 자모 둘이 한 덩어리가 된다. 뼈대의 갈림점에서 끊은 조각들을 단위로 배치를 다시 찾아,
+  // 같은 기준(상자 겹침·모양·잉크 비율)으로 더 나은 답이 있으면 바꾼다.
+  const U = REFINE && (!isFinite(bestCost) || bestCost / nSlots > REFINE_ABOVE) ? strokeUnits(bm) : { n: 0, unit: new Int32Array(0), pen: 0 }
+  if (REFINE && U.n >= nSlots && U.n <= 18 && (!isFinite(bestCost) || bestCost / nSlots > REFINE_ABOVE)) {
+    const n = U.n
+    const uSize = new Array<number>(n + 1).fill(0)
+    const uBox: B[] = Array.from({ length: n + 1 }, () => ({ x0: 1, y0: 1, x1: 0, y1: 0 }))
+    const uPts: number[][] = Array.from({ length: n + 1 }, () => [])
+    const uVote: number[][] = Array.from({ length: n + 1 }, () => [0, 0, 0, 0])
+    const uOld: number[][] = Array.from({ length: n + 1 }, () => [0, 0, 0, 0])
+    for (let y = 0; y < bm.h; y++) for (let x = 0; x < bm.w; x++) {
+      const i = y * bm.w + x
+      const u = U.unit[i]
+      if (!u) continue
+      uSize[u]++
+      const nx = (x - box.x) / box.w, ny = (y - box.y) / box.h
+      grow(uBox[u], nx, ny)
+      if ((x + y) % 3 === 0) uPts[u].push(nx, ny)
+      uVote[u][best[i]]++
+      uOld[u][labels[i] || best[i]]++
+    }
+    const accU: B[] = [0, 1, 2, 3].map(() => ({ x0: 1, y0: 1, x1: 0, y1: 0 }))
+    const inkU = [0, 0, 0, 0]
+    const evalUnits = (asg: Int8Array) => {
+      for (let k = 1; k <= nSlots; k++) { accU[k] = { x0: 1, y0: 1, x1: 0, y1: 0 }; inkU[k] = 0 }
+      for (let u = 1; u <= n; u++) {
+        const a = accU[asg[u]], b = uBox[u]
+        a.x0 = Math.min(a.x0, b.x0); a.y0 = Math.min(a.y0, b.y0); a.x1 = Math.max(a.x1, b.x1); a.y1 = Math.max(a.y1, b.y1)
+        inkU[asg[u]] += uSize[u]
+      }
+      let cost = 0
+      for (let k = 1; k <= nSlots; k++) if (!inkU[k]) cost += 2.5
+      // 전체 글자 기준으로 보았을 때 그 자리에 오는 자모와 다르게 배정한 잉크의 비율 (위치 사전 지식)
+      let agree = 0
+      for (let u = 1; u <= n; u++) agree += uVote[u][asg[u]]
+      cost += VOTE_W * (1 - agree / total)
+      const hit = [0, 0, 0, 0], cnt = [0, 0, 0, 0]
+      for (let u = 1; u <= n; u++) {
+        const k = asg[u], a = accU[k], r = refBox[k - 1], m = fat[k - 1]!
+        const aw = Math.max(1e-3, a.x1 - a.x0), ah = Math.max(1e-3, a.y1 - a.y0)
+        const rw = r.x1 - r.x0, rh = r.y1 - r.y0
+        const pts = uPts[u]
+        for (let t = 0; t < pts.length; t += 2) {
+          const uu = r.x0 + ((pts[t] - a.x0) / aw) * rw, vv = r.y0 + ((pts[t + 1] - a.y0) / ah) * rh
+          const px = Math.round(ref.box.x + uu * ref.box.w), py = Math.round(ref.box.y + vv * ref.box.h)
+          cnt[k]++
+          if (px >= 0 && py >= 0 && px < REF && py < REF && m[py * REF + px]) hit[k]++
+        }
+      }
+      for (let k = 1; k <= nSlots; k++) {
+        if (!inkU[k]) continue
+        const shape = cnt[k] ? hit[k] / cnt[k] : 0
+        cost += 0.7 * (1 - iou(accU[k], refBox[k - 1])) + 1.2 * (1 - shape) + 0.6 * Math.abs(inkU[k] / total - refFrac[k - 1])
+      }
+      return cost
+    }
+    const argmax = (v: number[]) => { let b = 1; for (let k = 2; k <= nSlots; k++) if (v[k] > v[b]) b = k; return b }
+    const search = (init: Int8Array) => {
+      const asg = init.slice()
+      let cur = evalUnits(asg)
+      for (let pass = 0; pass < 10; pass++) {
+        let improved = false
+        for (let u = 1; u <= n; u++) {
+          const keep = asg[u]
+          let bl = keep, bc = cur
+          for (let l = 1; l <= nSlots; l++) {
+            if (l === keep) continue
+            asg[u] = l
+            const c = evalUnits(asg)
+            if (c < bc - 1e-6) { bc = c; bl = l }
+          }
+          asg[u] = bl
+          if (bl !== keep) { cur = bc; improved = true }
+        }
+        if (!improved) break
+      }
+      return { asg, cost: cur }
+    }
+    const initOld = new Int8Array(n + 1), initVote = new Int8Array(n + 1)
+    for (let u = 1; u <= n; u++) { initOld[u] = argmax(uOld[u]); initVote[u] = argmax(uVote[u]) }
+    const oldCost = evalUnits(initOld)
+    const a = search(initOld), b = search(initVote)
+    const win = a.cost <= b.cost ? a : b
+    if (segDebug.on) {
+      segDebug.log.push(`units n=${n} sizes=${uSize.slice(1).join(',')} boxes=${uBox.slice(1).map((b) => [b.x0, b.y0, b.x1, b.y1].map((v) => v.toFixed(2)).join(',')).join(' | ')}`)
+      segDebug.log.push(`old=${Array.from(initOld.slice(1)).join('')} ${oldCost.toFixed(3)} A=${Array.from(a.asg.slice(1)).join('')} ${a.cost.toFixed(3)} B=${Array.from(b.asg.slice(1)).join('')} ${b.cost.toFixed(3)}`)
+      ;(segDebug as any).evalUnits = (str: string) => { const t = new Int8Array(n + 1); [...str].forEach((c, i) => { t[i + 1] = +c }); return evalUnits(t) }
+    }
+    if (win.cost < oldCost - 0.02) {
+      for (let i = 0; i < labels.length; i++) if (U.unit[i]) labels[i] = win.asg[U.unit[i]]
+      cleanFragments(bm, labels, 0.18, 40)
+      return { labels, cost: Math.min(isFinite(bestCost) ? bestCost : 9, win.cost) / nSlots }
+    }
   }
   return { labels, cost: isFinite(bestCost) ? bestCost / nSlots : 9 }
 }

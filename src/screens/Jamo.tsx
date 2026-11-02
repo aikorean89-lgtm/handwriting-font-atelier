@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Head } from '../ui/common'
 import { CellCanvas, SLOT_COLORS } from '../ui/CellCanvas'
 import { allCells, type Cell, type Project } from '../state'
 import { decompose, isHangul, CHO, JUNG, JONG } from '../engine/hangul'
 import { cycleRegion, segmentScored } from '../engine/segment'
+import { Library } from '../engine/model'
+import { ensureRefFont } from '../engine/refmask'
 
 /** 의심스러운 분리: 배치 비용이 높거나, 한 자모가 잉크의 4% 미만 (고친 글자는 제외) */
 export const COST_FLAG = 0.62
@@ -22,7 +24,26 @@ export function JamoScreen({ project, onCell, onNext, onBack }: {
   project: Project; onCell: (index: number, patch: Partial<Cell>) => void; onNext: () => void; onBack: () => void
 }) {
   const cells = useMemo(() => allCells(project).filter((c) => c.include && c.char && isHangul(c.char) && c.labels), [project])
-  const odd = cells.filter(suspicious).sort((a, b) => (b.segCost ?? 0) - (a.segCost ?? 0))
+  // 같은 자모를 다른 글자들과 비교해 모양이 튀는 글자 (획을 빼앗기거나 더 가져갔을 가능성)
+  const [odd2, setOdd2] = useState<Map<number, string[]>>(new Map())
+  useEffect(() => {
+    let alive = true
+    const t = window.setTimeout(async () => {
+      await ensureRefFont(cells.map((c) => c.char).join(''))
+      if (!alive) return
+      const lib = new Library(cells.map((c) => ({ index: c.index, char: c.char!, bitmap: c.bitmap, labels: c.labels!, segCost: c.segCost, edited: c.labelsEdited })))
+      const m = new Map<number, string[]>()
+      for (const sm of lib.outliers(true)) {
+        const idx = +sm.key.split(':')[0]
+        const name = sm.slot === 'cho' ? `초성 ${CHO[sm.jamo]}` : sm.slot === 'jung' ? `중성 ${JUNG[sm.jamo]}` : `종성 ${JONG[sm.jamo]}`
+        m.set(idx, [...(m.get(idx) ?? []), name])
+      }
+      setOdd2(m)
+    }, 60)
+    return () => { alive = false; clearTimeout(t) }
+  }, [cells])
+  const isOdd = (c: Cell) => suspicious(c) || (!c.labelsEdited && odd2.has(c.index))
+  const odd = cells.filter(isOdd).sort((a, b) => (odd2.has(b.index) ? 1 : 0) - (odd2.has(a.index) ? 1 : 0) || (b.segCost ?? 0) - (a.segCost ?? 0))
   const [filter, setFilter] = useState<'odd' | 'all'>(odd.length ? 'odd' : 'all')
   const [open, setOpen] = useState<number | null>(null)
   const shown = filter === 'odd' ? odd : cells
@@ -46,7 +67,7 @@ export function JamoScreen({ project, onCell, onNext, onBack }: {
       {shown.length === 0 ? <p className="note">확인할 글자가 없어요. 전체를 눌러 훑어봐도 좋아요.</p> : (
         <div className="grid">
           {shown.map((c) => (
-            <button key={c.index} className={`cell ${suspicious(c) ? 'flag' : ''}`} onClick={() => setOpen(c.index)} aria-label={`${c.char} 자모 보기`}>
+            <button key={c.index} className={`cell ${isOdd(c) ? 'flag' : ''}`} onClick={() => setOpen(c.index)} aria-label={`${c.char} 자모 보기`} title={odd2.has(c.index) ? `다른 글자에 쓴 같은 자모와 모양이 달라요: ${odd2.get(c.index)!.join(', ')}` : undefined}>
               <CellCanvas bitmap={c.bitmap} labels={c.labels} />
               <span className="lbl"><b>{c.char}</b>{c.labelsEdited && <span>고침</span>}</span>
             </button>
@@ -65,6 +86,9 @@ export function JamoScreen({ project, onCell, onNext, onBack }: {
             <p className="note" style={{ marginTop: 0 }}>
               초성 {CHO[sCur.cho]}, 중성 {JUNG[sCur.jung]}{sCur.jong ? `, 종성 ${JONG[sCur.jong]}` : ''}. 색이 틀린 획을 누르세요.
             </p>
+            {odd2.has(cur.index) && !cur.labelsEdited && (
+              <p className="note" style={{ color: 'var(--warn)', marginTop: 0 }}>{odd2.get(cur.index)!.join(', ')}: 다른 글자에 쓴 같은 자모와 모양이 달라요. 획이 다른 자모로 넘어갔는지 확인해 주세요. 그대로 두면 이 글자의 해당 자모는 조합에 쓰지 않아요.</p>
+            )}
             <CellCanvas
               bitmap={cur.bitmap} labels={cur.labels} label={`${cur.char} 자모 색 구분`}
               onTap={(x, y) => {

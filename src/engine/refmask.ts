@@ -1,7 +1,7 @@
 // 기준 폰트로 음절의 초·중·종 영역 지도를 만든다.
 // 같은 중성·종성에 초성만 바꾼 글자들에서 공통으로 남는 화소 = 중성+종성 → 나머지가 초성.
 import { CHO, JONG, compose, decompose, type Syl } from './hangul'
-import { type Box, dilate } from './bitmap'
+import { type Box, components, dilate } from './bitmap'
 
 export const REF = 128
 const REF_FONT = '"Pretendard Variable", "Pretendard", "Noto Sans KR", sans-serif'
@@ -106,6 +106,112 @@ function frequency(chars: string[], target?: Uint8Array): Float32Array {
 
 const cache = new Map<string, RefMasks>()
 
+export const persistDebug = { on: false, log: [] as string[] }
+
+let PERSIST_IOU = 0.62
+/** '바뀐 자모'로 잡힌 화소 묶음이 사실은 위치만 조금 옮겨 그려진 같은 획인지 본다.
+ *  ㅓ·ㅕ의 짧은 획(초성에 따라 몇 화소씩 움직임)이나 ㅡ(초성 높이에 따라 오르내림)가 이렇게 잘못 잡힌다.
+ *  대조 글자들 대부분에서 근처에 거의 같은 모양이 있으면 바뀌지 않은 자모로 되돌린다 */
+function rescueMoved(all: Uint8Array, changed: Uint8Array, alts: string[]) {
+  const { labels: comp, sizes } = components({ w: REF, h: REF, data: all })
+  const nComp = sizes.length - 1
+  const part: number[][] = Array.from({ length: nComp + 1 }, () => [])
+  for (let i = 0; i < all.length; i++) if (all[i] && changed[i]) part[comp[i]].push(i)
+  const renders = alts.map((ch) => render(ch))
+  const W = REF + 1
+  const sats = renders.map((a) => {
+    const sat = new Int32Array(W * W)
+    for (let y = 0; y < REF; y++) { let row = 0; for (let x = 0; x < REF; x++) { row += a[y * REF + x]; sat[(y + 1) * W + x + 1] = sat[y * W + x + 1] + row } }
+    return sat
+  })
+  const boxInk = (sat: Int32Array, x0: number, y0: number, x1: number, y1: number) => {
+    x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(REF - 1, x1); y1 = Math.min(REF - 1, y1)
+    if (x1 < x0 || y1 < y0) return 0
+    return sat[(y1 + 1) * W + x1 + 1] - sat[y0 * W + x1 + 1] - sat[(y1 + 1) * W + x0] + sat[y0 * W + x0]
+  }
+  const rescued: number[] = []
+  for (let c = 1; c <= nComp; c++) {
+    const M = part[c]
+    if (M.length < 4) continue
+    const whole = M.length > sizes[c] * 0.5
+    let x0 = REF, y0 = REF, x1 = -1, y1 = -1
+    for (const i of M) { const x = i % REF, y = (i / REF) | 0; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+    const R = whole ? 16 : 8
+    let hits = 0
+    renders.forEach((a, k) => {
+      const score = (dx: number, dy: number) => {
+        let ov = 0
+        for (const i of M) {
+          const x = (i % REF) + dx, y = ((i / REF) | 0) + dy
+          if (x >= 0 && y >= 0 && x < REF && y < REF && a[y * REF + x]) ov++
+        }
+        // 통째로 잡힌 덩어리는 모양까지 같아야(그 자리에 다른 획이 더 있으면 안 됨) 같은 획으로 본다
+        return whole ? ov / Math.max(1, M.length + boxInk(sats[k], x0 + dx - 1, y0 + dy - 1, x1 + dx + 1, y1 + dy + 1) - ov) : ov / M.length
+      }
+      let best = 0, bx = 0, by = 0
+      for (let dy = -R; dy <= R; dy += 2) for (let dx = -R; dx <= R; dx += 2) { const v = score(dx, dy); if (v > best) { best = v; bx = dx; by = dy } }
+      for (let dy = by - 1; dy <= by + 1; dy++) for (let dx = bx - 1; dx <= bx + 1; dx++) best = Math.max(best, score(dx, dy))
+      if (best >= (whole ? 0.8 : 0.85)) hits++
+    })
+    if (persistDebug.on) persistDebug.log.push(`c${c} part ${M.length}/${sizes[c]} hits ${hits}/${alts.length}`)
+    if (hits >= Math.ceil(alts.length * 0.8)) rescued.push(c)
+  }
+  // 바뀐 자모가 하나도 안 남으면 안 되므로, 그 경우엔 되돌리지 않는다
+  const left = part.reduce((s, M, c) => s + (rescued.includes(c) ? 0 : M.length), 0)
+  if (left < 8) return
+  for (const c of rescued) for (const i of part[c]) changed[i] = 0
+}
+
+/** 대상 글자의 획 덩어리마다, 대조 글자들에서도 (조금 움직였더라도) 같은 모양으로 다시 나오는 비율 */
+function persistence(all: Uint8Array, comp: Int32Array, sizes: number[], alts: string[]): number[] {
+  const nComp = sizes.length - 1
+  const pts: number[][] = Array.from({ length: nComp + 1 }, () => [])
+  const bb = Array.from({ length: nComp + 1 }, () => ({ x0: REF, y0: REF, x1: -1, y1: -1 }))
+  for (let y = 0; y < REF; y++) for (let x = 0; x < REF; x++) {
+    const i = y * REF + x
+    if (!all[i]) continue
+    const c = comp[i]
+    pts[c].push(x, y)
+    const b = bb[c]
+    if (x < b.x0) b.x0 = x; if (x > b.x1) b.x1 = x; if (y < b.y0) b.y0 = y; if (y > b.y1) b.y1 = y
+  }
+  const hits = new Array<number>(nComp + 1).fill(0)
+  const R = 14, W = REF + 1
+  for (const ch of alts) {
+    const a = render(ch)
+    const sat = new Int32Array(W * W)
+    for (let y = 0; y < REF; y++) {
+      let row = 0
+      for (let x = 0; x < REF; x++) { row += a[y * REF + x]; sat[(y + 1) * W + x + 1] = sat[y * W + x + 1] + row }
+    }
+    const boxInk = (x0: number, y0: number, x1: number, y1: number) => {
+      x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(REF - 1, x1); y1 = Math.min(REF - 1, y1)
+      if (x1 < x0 || y1 < y0) return 0
+      return sat[(y1 + 1) * W + x1 + 1] - sat[y0 * W + x1 + 1] - sat[(y1 + 1) * W + x0] + sat[y0 * W + x0]
+    }
+    for (let c = 1; c <= nComp; c++) {
+      if (sizes[c] < 6) continue
+      const P = pts[c], b = bb[c]
+      let best = 0
+      const tryShift = (dx: number, dy: number) => {
+        let ov = 0
+        for (let t = 0; t < P.length; t += 2) {
+          const x = P[t] + dx, y = P[t + 1] + dy
+          if (x >= 0 && y >= 0 && x < REF && y < REF && a[y * REF + x]) ov++
+        }
+        const iou = ov / Math.max(1, sizes[c] + boxInk(b.x0 + dx - 1, b.y0 + dy - 1, b.x1 + dx + 1, b.y1 + dy + 1) - ov)
+        if (iou > best) best = iou
+        return iou
+      }
+      let bx = 0, by = 0, bv = -1
+      for (let dy = -R; dy <= R; dy += 2) for (let dx = -R; dx <= R; dx += 2) { const v = tryShift(dx, dy); if (v > bv) { bv = v; bx = dx; by = dy } }
+      for (let dy = by - 1; dy <= by + 1; dy++) for (let dx = bx - 1; dx <= bx + 1; dx++) tryShift(dx, dy)
+      if (best >= PERSIST_IOU) hits[c]++
+    }
+  }
+  return hits.map((h) => h / Math.max(1, alts.length))
+}
+
 export function refMasks(ch: string): RefMasks {
   const hit = cache.get(ch)
   if (hit) return hit
@@ -117,26 +223,38 @@ export function refMasks(ch: string): RefMasks {
   let jong: Uint8Array | null = null
   let notJong: Uint8Array = new Uint8Array(N)
   if (s.jong > 0) {
-    const alts = JONG_ALTS.filter((t) => t !== s.jong).slice(0, 5)
-    const f = frequency(alts.map((t) => compose({ ...s, jong: t })), all)
+    const alts = JONG_ALTS.filter((t) => t !== s.jong).slice(0, 5).map((t) => compose({ ...s, jong: t }))
+    const f = frequency(alts, all)
     const keep = new Uint8Array(N)
     for (let i = 0; i < N; i++) keep[i] = f[i] >= 0.99 ? 1 : 0
     notJong = dilate(keep, REF, REF, 3)
+    // 받침이 바뀌면 기준 글꼴이 윗부분을 통째로 위아래로 옮기므로, 덩어리마다 위치를 맞춰 다시 나오는지 본다
+    const { labels: comp, sizes } = components({ w: REF, h: REF, data: all })
+    const per = persistence(all, comp, sizes, alts)
     jong = new Uint8Array(N)
-    for (let i = 0; i < N; i++) jong[i] = all[i] && !notJong[i] ? 1 : 0
+    for (let i = 0; i < N; i++) {
+      if (!all[i]) continue
+      const k = per[comp[i]]
+      jong[i] = k >= 0.8 ? 0 : k <= 0.2 ? 1 : notJong[i] ? 0 : 1
+    }
+    rescueMoved(all, jong, alts)
   }
   // 초성 영역
-  const choAlts = CHO_ALTS.filter((c) => c !== s.cho).slice(0, 5)
-  const f2 = frequency(choAlts.map((c) => compose({ ...s, cho: c })), all)
+  const choAlts = CHO_ALTS.filter((c) => c !== s.cho).slice(0, 5).map((c) => compose({ ...s, cho: c }))
+  const f2 = frequency(choAlts, all)
   const keep2 = new Uint8Array(N)
   for (let i = 0; i < N; i++) keep2[i] = f2[i] >= 0.99 ? 1 : 0
   const notCho = dilate(keep2, REF, REF, 3)
   const cho = new Uint8Array(N)
   const jung = new Uint8Array(N)
+  const changed = new Uint8Array(N)
+  for (let i = 0; i < N; i++) if (all[i] && !(jong && jong[i]) && !notCho[i]) changed[i] = 1
+  const rest = new Uint8Array(N)
+  for (let i = 0; i < N; i++) rest[i] = all[i] && !(jong && jong[i]) ? 1 : 0
+  rescueMoved(rest, changed, choAlts)
   for (let i = 0; i < N; i++) {
-    if (!all[i]) continue
-    if (jong && jong[i]) continue
-    if (!notCho[i]) cho[i] = 1
+    if (!rest[i]) continue
+    if (changed[i]) cho[i] = 1
     else jung[i] = 1
   }
   cleanSlots(all, cho, jung, jong)
@@ -213,7 +331,7 @@ function cleanSlots(all: Uint8Array, cho: Uint8Array, jung: Uint8Array, jong: Ui
           if (lab[q] === l) { if (!seen[q]) { seen[q] = 1; stack.push(q) } } else touch[lab[q]]++
         }
       }
-      if (region.length >= Math.max(20, slotSize[l] * 0.1)) continue
+      if (region.length >= Math.max(20, slotSize[l] * 0.3)) continue
       let b = 0
       for (let k = 1; k <= 3; k++) if (touch[k] > touch[b]) b = k
       if (b) for (const p of region) lab[p] = b

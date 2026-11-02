@@ -143,17 +143,20 @@ export async function buildFont(cellsIn: BuildCell[], family: string, onProgress
 
   // 자모 부품 글리프 (필요할 때 벡터화)
   const compIndex = new Map<string, number>()
-  const componentGlyph = (s: Sample): number => {
-    const hit = compIndex.get(s.key)
+  // 자모를 작게 줄여 넣으면 획도 같이 가늘어진다. 줄이는 정도에 따라 미리 획을 굵혀(크게 넣으면 가늘혀) 굵기를 맞춘다
+  const strokeFix = (scale: number) => (scale < 0.68 ? 4 : scale < 0.8 ? 2 : scale < 0.92 ? 1 : scale > 1.3 ? -1 : 0)
+  const componentGlyph = (s: Sample, fix = 0): number => {
+    const key = `${s.key}:${fix}`
+    const hit = compIndex.get(key)
     if (hit != null) return hit
-    const cs = vectorize(cv, s.bitmap, s.mask, s.want, s.isRef ? 0.6 : 1, s.isRef ? 0 : weight)
+    const cs = vectorize(cv, s.bitmap, s.mask, s.want, s.isRef ? 0.6 : 1, s.isRef ? 0 : weight + fix)
     const idx = glyphs.length
     glyphs.push({ advance: EM, contours: toPoints(cs, TX, TY) })
-    compIndex.set(s.key, idx)
+    compIndex.set(key, idx)
     return idx
   }
   const emPart = (p: { sample: Sample; sx: number; sy: number; dx: number; dy: number }) => ({
-    glyph: componentGlyph(p.sample), sx: p.sx, sy: p.sy,
+    glyph: componentGlyph(p.sample, p.sample.isRef ? 0 : strokeFix(Math.sqrt(p.sx * p.sy))), sx: p.sx, sy: p.sy,
     dx: cX * (1 - p.sx) + k * p.dx,
     dy: cY * (1 - p.sy) - k * p.dy,
   })
@@ -176,6 +179,7 @@ export async function buildFont(cellsIn: BuildCell[], family: string, onProgress
     if (!plan) continue
     composites.push({ advance: EM + tracking, unicodes: [ch.codePointAt(0)!], components: plan.parts.map(emPart) })
   }
+  normalizeHangul(glyphs, composites, direct)
   onProgress({ phase: 'write', done: 0, total: 1, direct: directSet, composedUpTo: SCOUNT })
   await tick()
   // 부품이 비어 있는 복합 글리프는 빈 글리프로
@@ -193,4 +197,58 @@ export function writeFont(glyphs: TGlyph[], family: string, owner?: string): Uin
     copyright: `© ${owner || family} ${year}`, license: '이 폰트는 글씨를 쓴 사람의 것입니다. 폰트공방으로 만들었습니다.',
     ascender: 1000, descender: -250, lineGap: 0, typoAscender: ASC, typoDescender: -120, typoLineGap: 250, xHeight: 500, capHeight: 700,
   })
+}
+
+type BBox = { x0: number; y0: number; x1: number; y1: number }
+function contourBox(g: TGlyph): BBox | null {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+  for (const c of g.contours ?? []) for (const p of c) { if (p.x < x0) x0 = p.x; if (p.x > x1) x1 = p.x; if (p.y < y0) y0 = p.y; if (p.y > y1) y1 = p.y }
+  return isFinite(x0) ? { x0, y0, x1, y1 } : null
+}
+function compositeBox(g: TGlyph, all: TGlyph[], cache: Map<number, BBox | null>): BBox | null {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+  for (const c of g.components ?? []) {
+    let b = cache.get(c.glyph)
+    if (b === undefined) { b = contourBox(all[c.glyph]); cache.set(c.glyph, b) }
+    if (!b) continue
+    const ax = c.sx * b.x0 + c.dx, bx = c.sx * b.x1 + c.dx, ay = c.sy * b.y0 + c.dy, by = c.sy * b.y1 + c.dy
+    x0 = Math.min(x0, ax, bx); x1 = Math.max(x1, ax, bx); y0 = Math.min(y0, ay, by); y1 = Math.max(y1, ay, by)
+  }
+  return isFinite(x0) ? { x0, y0, x1, y1 } : null
+}
+
+/** 한글 글리프의 자리를 고른다: 가로는 칸 가운데로, 세로는 직접 쓴 글자들의 중심 쪽으로 당기고,
+ *  조합 글자가 직접 쓴 글자보다 지나치게 크면 줄인다. 글자 사이 간격이 들쭉날쭉하지 않게 하려는 것 */
+function normalizeHangul(glyphs: TGlyph[], composites: TGlyph[], direct: Map<number, number>) {
+  const med = (a: number[]) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[s.length >> 1] : 0 }
+  const dBoxes: BBox[] = []
+  for (const gi of direct.values()) { const b = contourBox(glyphs[gi]); if (b) dBoxes.push(b) }
+  if (dBoxes.length < 5) return
+  const cyMed = med(dBoxes.map((b) => (b.y0 + b.y1) / 2))
+  const hMed = med(dBoxes.map((b) => b.y1 - b.y0))
+  const wMed = med(dBoxes.map((b) => b.x1 - b.x0))
+  const CX = 500
+  for (const gi of direct.values()) {
+    const g = glyphs[gi], b = contourBox(g)
+    if (!b) continue
+    const sx = Math.round(CX - (b.x0 + b.x1) / 2), sy = Math.round((cyMed - (b.y0 + b.y1) / 2) * 0.4)
+    if (!sx && !sy) continue
+    g.contours = g.contours!.map((c) => c.map((p) => ({ ...p, x: p.x + sx, y: p.y + sy })))
+  }
+  const cache = new Map<number, BBox | null>()
+  for (const g of composites) {
+    const cp = g.unicodes?.[0] ?? 0
+    if (cp < 0xac00 || cp > 0xd7a3 || !g.components?.length) continue
+    const b = compositeBox(g, glyphs, cache)
+    if (!b) continue
+    const w = b.x1 - b.x0, h = b.y1 - b.y0
+    const k = Math.min(1, (hMed * 1.15) / Math.max(1, h), (wMed * 1.2) / Math.max(1, w))
+    const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2
+    const ty = cy + (cyMed - cy) * 0.6
+    for (const c of g.components) {
+      c.sx *= k; c.sy *= k
+      c.dx = k * (c.dx - cx) + CX
+      c.dy = k * (c.dy - cy) + ty
+    }
+  }
 }

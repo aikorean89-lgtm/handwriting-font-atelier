@@ -42,8 +42,8 @@ class ArtifactBackend implements GalleryBackend {
   kind = 'artifact' as const
   private ready: Promise<{ db: any; user: any; assets: any; uid: string | null }>
   constructor() {
-    const use = (n: string) => (window as any).claude.use(n) as Promise<any>
-    this.ready = Promise.all([use('db'), use('user'), use('assets')]).then(async ([db, user, assets]) => ({
+    const cap = (n: string) => (window as any).claude.use(n) as Promise<any>
+    this.ready = Promise.all([cap('db'), cap('user'), cap('assets')]).then(async ([db, user, assets]) => ({
       db, user, assets, uid: user ? await user.id().catch(() => null) : null,
     }))
   }

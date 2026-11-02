@@ -30,3 +30,5 @@ tests/*.pdf
 tests/supp-1.png
 tests/photo-supp.jpg
 .vercel
+tests/user.ttf
+tests/user-direct.txt

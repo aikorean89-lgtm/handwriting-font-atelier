@@ -4,7 +4,7 @@
 <script src="../node_modules/@techstark/opencv-js/dist/opencv.js"></script>
 </head><body><canvas id="c"></canvas><script type="module">
 window.synth = async (sheetNo, fontName, seed, opts = {}) => {
-  const layout = await (await fetch('../src/data/template-layout.json')).json()
+  const layout = await (await fetch(opts.layout || '../src/data/template-layout.json')).json()
   const def = opts.cells ? { cells: opts.cells } : layout.sheets.find(s => s.sheet === sheetNo)
   let s = seed
   const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647 }

@@ -3,7 +3,7 @@ import { Head } from '../ui/common'
 import { Viewfinder } from './Viewfinder'
 import { CornerEditor } from './CornerEditor'
 import { fileToCanvas, processSheet, type Pt } from '../engine/sheet'
-import { LAYOUT, TIERS, isSupplement, sheetDef, suppLabel, type Tier } from '../engine/template'
+import { LAYOUT, TEMPLATE_VERSION, TIERS, isSupplement, sheetDef, suppLabel, type Tier } from '../engine/template'
 import { loadCV } from '../engine/cv'
 import { isHangul } from '../engine/hangul'
 import { ensureRefFont } from '../engine/refmask'
@@ -36,19 +36,20 @@ export function CaptureScreen({ project, onSheet, onNext }: { project: Project; 
   const [err, setErr] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [focus, setFocus] = useState<number | null>(null)
+  const [oldSheet, setOldSheet] = useState(false) // 수동 선택: 예전(v1) 시트인지
   const fileRef = useRef<HTMLInputElement>(null)
   const pendingSlot = useRef(1)
   const live = canUseLiveCamera()
 
   useEffect(() => { loadCV().catch(() => {}) }, []) // 미리 받기
 
-  const process = async (canvas: HTMLCanvasElement, slot: number, corners?: Pt[], forceSheet?: number) => {
+  const process = async (canvas: HTMLCanvasElement, slot: number, corners?: Pt[], forceSheet?: number, forceVer?: number) => {
     setErr(null); setInfo(null)
     setMode({ k: 'processing', slot, msg: '시트를 펴고 있어요' })
     try {
       await new Promise((r) => setTimeout(r, 30))
-      const res = await processSheet(canvas, { manualCorners: corners, forceSheet })
-      if (res.sheetNo == null || !sheetDef(res.sheetNo)) { setMode({ k: 'pick', slot, canvas, corners }); return }
+      const res = await processSheet(canvas, { manualCorners: corners, forceSheet, forceVer })
+      if (res.sheetNo == null || !sheetDef(res.sheetNo, res.ver)) { setMode({ k: 'pick', slot, canvas, corners }); return }
       setMode({ k: 'processing', slot, msg: '자모를 나누고 있어요' })
       const chars = res.cells.map((c) => c.char ?? '').join('')
       await ensureRefFont(chars)
@@ -57,7 +58,7 @@ export function CaptureScreen({ project, onSheet, onNext }: { project: Project; 
         const seg = c.char && isHangul(c.char) && use ? segmentScored(c.bitmap, c.char) : null
         return { index: c.index, char: c.char, state: c.state, include: use, bitmap: c.bitmap, labels: seg?.labels, segCost: seg?.cost }
       })
-      onSheet({ no: res.sheetNo, preview: res.preview, sharpness: res.sharpness, capturedAt: Date.now(), cells })
+      onSheet({ no: res.sheetNo, ver: res.ver, preview: res.preview, sharpness: res.sharpness, capturedAt: Date.now(), cells })
       if (res.suppChars) setInfo(`${eul(suppLabel(res.sheetNo))} 읽었어요. 여기 쓴 ${res.suppChars.length}자는 폰트를 다시 만들 때 이 글씨로 바뀌어요.`)
       else if (slot > 0 && res.sheetNo !== slot) setInfo(`QR을 읽어 보니 ${res.sheetNo}번 시트예요. ${res.sheetNo}번 자리에 넣었어요.`)
       if (res.markersFound.length === 3) setInfo('마커 3개로 폈어요. 결과가 어긋나 보이면 다시 찍어 주세요.')
@@ -94,9 +95,13 @@ export function CaptureScreen({ project, onSheet, onNext }: { project: Project; 
         <div className="panel">
           <h2 style={{ marginTop: 0 }}>몇 번 시트인가요?</h2>
           <p className="note">오른쪽 위 QR 코드를 읽지 못했어요. 시트 오른쪽 위에 적힌 번호를 골라 주세요.</p>
+          <label className="share-opt">
+            <input type="checkbox" checked={oldSheet} onChange={(e) => setOldSheet(e.target.checked)} />
+            <span>예전에 받은 시트예요 <small>(제목 아래에 TEMPLATE v1.0이라고 적혀 있으면 체크)</small></span>
+          </label>
           <div className="actions">
             {[...LAYOUT.sheets.map((s) => s.sheet), ...supps].map((no) => (
-              <button key={no} className="btn" onClick={() => process(mode.canvas, mode.slot, mode.corners, no)}>{sheetName(no)}</button>
+              <button key={no} className="btn" onClick={() => process(mode.canvas, mode.slot, mode.corners, no, isSupplement(no) ? undefined : oldSheet ? 1 : TEMPLATE_VERSION)}>{sheetName(no)}</button>
             ))}
           </div>
         </div>
@@ -159,7 +164,7 @@ export function CaptureScreen({ project, onSheet, onNext }: { project: Project; 
 }
 
 function SheetCheck({ sheet }: { sheet: Sheet }) {
-  const def = sheetDef(sheet.no)
+  const def = sheetDef(sheet.no, sheet.ver ?? 1)
   if (!def) return null
   const by = (st: string) => sheet.cells.filter((c) => c.state === st).length
   const [W, H] = LAYOUT.page

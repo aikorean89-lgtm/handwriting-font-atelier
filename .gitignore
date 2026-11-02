@@ -32,3 +32,5 @@ tests/photo-supp.jpg
 .vercel
 tests/user.ttf
 tests/user-direct.txt
+tests/tpl-noqr.png
+tests/photo-noqr-v1.jpg

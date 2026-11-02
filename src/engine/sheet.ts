@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { loadCV } from './cv'
 import { type Bitmap, newBitmap, removeSpecks, countInk } from './bitmap'
-import { LAYOUT, PX_PER_MM, PAGE_W, PAGE_H, markerCornersMm, markerOuterCornerMm, parseQrInfo, sheetDef } from './template'
+import { LAYOUT, PX_PER_MM, PAGE_W, PAGE_H, markerCornersMm, markerOuterCornerMm, parseQrInfo, sheetDef, TEMPLATE_VERSION } from './template'
 
 export type CellState = 'ok' | 'empty' | 'skip' | 'overflow'
 export interface CellResult {
@@ -13,6 +13,7 @@ export interface CellResult {
 }
 export interface SheetResult {
   sheetNo: number | null
+  ver: number // 템플릿 버전 (QR에서 읽거나 사용자가 고름)
   suppChars?: string[]
   markersFound: number[]
   sharpness: number
@@ -101,7 +102,7 @@ export function sharpnessOf(cv: any, gray: any): number {
   return v
 }
 
-export interface ProcessOptions { manualCorners?: Pt[] /* TL, TR, BR, BL 순 종이 바깥 마커 모서리 */; forceSheet?: number }
+export interface ProcessOptions { manualCorners?: Pt[] /* TL, TR, BR, BL 순 종이 바깥 마커 모서리 */; forceSheet?: number; forceVer?: number }
 
 export async function processSheet(canvas: HTMLCanvasElement, opts: ProcessOptions = {}): Promise<SheetResult> {
   const cv = await loadCV()
@@ -147,10 +148,12 @@ export async function processSheet(canvas: HTMLCanvasElement, opts: ProcessOptio
 
   // 3) QR로 시트 번호
   let sheetNo: number | null = opts.forceSheet ?? null
+  let ver = opts.forceVer ?? TEMPLATE_VERSION
   let suppChars: string[] | undefined
   if (sheetNo == null) {
     const info = readQr(cv, page)
     sheetNo = info?.no ?? null
+    ver = info?.ver ?? ver
     suppChars = info?.chars
   }
 
@@ -189,9 +192,9 @@ export async function processSheet(canvas: HTMLCanvasElement, opts: ProcessOptio
   gMat.delete(); small.delete(); k.delete(); bg.delete()
 
   // 7) 칸 판정
-  const def = sheetNo != null ? sheetDef(sheetNo) : undefined
+  const def = sheetNo != null ? sheetDef(sheetNo, ver) : undefined
   const cells: CellResult[] = def ? def.cells.map((c) => cutCell(ink, c)) : []
-  return { sheetNo, suppChars, markersFound: found, sharpness, preview, cells }
+  return { sheetNo, ver, suppChars, markersFound: found, sharpness, preview, cells }
 }
 
 function cutCell(ink: Uint8Array, c: { index: number; char: string | null; cell: [number, number, number, number]; skipMark: [number, number, number] }): CellResult {

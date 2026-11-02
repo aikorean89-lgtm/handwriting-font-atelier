@@ -20,7 +20,7 @@ export function TemplateScreen({ tier, onNext }: { tier: Tier; onNext: () => voi
             <li><div><b>하늘색 십자 가운데에</b><span>칸 밖으로 나가지 않게 쓰세요. 하늘색 선은 찍은 뒤 자동으로 지워집니다.</span></div></li>
             <li><div><b>초성·중성·종성은 살짝 띄우기</b><span>획이 붙지 않으면 자모를 더 정확히 나눕니다.</span></div></li>
             <li><div><b>틀린 칸은 ○를 칠하기</b><span>칠한 칸은 건너뛰고, 그 글자는 다른 글씨에서 조합합니다.</span></div></li>
-            <li><div><b>낯선 글자도 모양만</b><span>곬, 읔 같은 글자는 특정 받침 모양을 얻기 위한 글자예요.</span></div></li>
+            <li><div><b>겹받침 글자도 모양만</b><span>표준 시트의 넋, 핥 같은 글자는 겹받침 모양을 얻기 위한 글자예요.</span></div></li>
           </ol>
           <div className="actions">
             <TemplateButton label="템플릿 PDF 받기" />

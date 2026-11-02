@@ -3,10 +3,10 @@ import { HeroGlyph } from '../ui/HeroGlyph'
 import { Mosaic } from '../ui/Mosaic'
 import { SCOUNT } from '../engine/hangul'
 import type { Project } from '../state'
-import { TIERS } from '../engine/template'
+import { LAYOUT, TIERS } from '../engine/template'
 import { TemplateButton } from '../ui/TemplateButton'
 
-const QUICK_CHARS = '이다는에하고가을지로서은아한어도기사니같곬광께끊끝넋높늦닮됐되듣떻뚫려름맺몇몫못묶밖받붉빠뿐쉽습싫싶쓰씨앉야얇얘없엌옛옮왜용워월웨웹위유육읊읔의읽쟨좋째쫓찮출커코템투폐표핥화획훑흰'
+const QUICK_CHARS = LAYOUT.sheets[0].cells.map((c) => c.char ?? '').join('')
 
 export function Home({ work, onStartNew, onResume, onGallery }: { work: Project | null; onStartNew: () => void; onResume: () => void; onGallery: () => void }) {
   const [confirm, setConfirm] = useState(false)

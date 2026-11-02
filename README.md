@@ -33,7 +33,7 @@ npm run build    # dist/ 에 정적 사이트 생성
 | 단계 | 화면 | 하는 일 |
 | --- | --- | --- |
 | 01 고르기 | `screens/Tier.tsx` | 빠른 폰트(1장, 한글 90자) / 표준 폰트(4장, 한글 225자 + 영문·기호) |
-| 02 쓰기 | `screens/Template.tsx` | `public/template/jaguk-template-v1.pdf` 인쇄 (실제 크기 100%) |
+| 02 쓰기 | `screens/Template.tsx` | `public/template/jaguk-template-v2.pdf` 인쇄 (v1 시트도 QR로 알아봄) (실제 크기 100%) |
 | 03 찍기 | `screens/Capture.tsx`, `Viewfinder.tsx` | 마커 4개 실시간 검출, 자동 촬영, 사진 올리기, 마커 실패 시 모서리 직접 지정 |
 | 04 다듬기 | `screens/Review.tsx`, `Jamo.tsx` | 칸 검수, 초·중·종 색 구분 확인, 획을 눌러 자모 고치기 |
 | 05 완성 | `screens/Build.tsx`, `Play.tsx`, `Export.tsx` | 11,172자 생성, 문장 미리보기, 굵기·자간 조절, 보충 시트, 이름 짓기, TTF 내려받기, 갤러리 공개 |
@@ -58,6 +58,13 @@ npm run build    # dist/ 에 정적 사이트 생성
 
 `src/data/template-layout.json`에 템플릿 칸 좌표(mm)가 들어 있습니다. 템플릿을 바꾸면 이 파일과 PDF를 함께 바꾸세요.
 
+## 템플릿 시트 (v2)
+
+- 칸 배치·크기는 v1과 같고 글자만 바뀌었습니다. 시트의 QR(`JAGUK|v2|…`)로 버전을 알아보므로 예전에 인쇄한 v1 시트도 그대로 읽힙니다. QR을 못 읽으면 시트 번호를 고를 때 '예전에 받은 시트예요'를 체크하면 v1 배치로 읽습니다.
+- 빠른 시트 90자: 가나다라마바사아자차카타파하로 시작하고, 자주 쓰는 글자 위주로 모든 초성·중성·홑받침을 담았습니다. 겹받침은 홑받침 두 개를 붙여 만듭니다.
+- 표준 225자: 실제 글에 나오는 자모 모양을 99% 이상 직접 받고, 흔한 모양은 샘플을 3개 이상 모읍니다. 곬·읔·퓟 같은 낯선 글자는 뺐습니다.
+- 다시 만들기: `tools/template/build.py` (`VER=2 python3 build.py`, 글자 목록은 `chars-v2.json`). 결과 PDF·레이아웃을 `public/template/`, `src/data/template-layout-v2.json`으로 복사합니다.
+
 ## 검증한 것
 
 - 가상 손글씨 사진(원근 기울임·그림자·잡음·JPEG)으로 빠른 폰트와 표준 폰트를 처음부터 끝까지 생성
@@ -78,6 +85,7 @@ npm run build    # dist/ 에 정적 사이트 생성
 - `devserver.ts`: dist + 메모리 갤러리 API 시험 서버 (포트 4180)
 - `v12.py`: 굵기·자간, 자동 문장부호, 보충 시트(PDF→합성 손글씨→업로드→교체), 갤러리 공개·검색·내리기·관리자
 - `real.html`, `realrun.py`, `compare.py`, `segsheet.py`, `groupsheet.py`, `metric.py`: 실제 사용자 폰트(`tests/user.ttf`, 저장소에 올리지 않음)의 직접 쓴 글자를 칸 그림으로 되돌려 자모 분리·조합을 다시 돌려 보고 비교하는 도구 (`npx vite --port 5179` 후 실행)
+- `synth2.py`, `pickv1.py`: v2 시트 가상 사진 생성, QR 없는 v1 시트를 수동으로 골랐을 때 v1 배치로 읽는지
 - `reseg.py`: 예전 방식으로 나눈 프로젝트를 이어서 하면 새 방식으로 다시 나누는지
 - `artifact-mock.py`: claude.ai 미리보기 환경(데이터베이스·파일 저장소)을 흉내 낸 갤러리 시험
 - `seg.html`, `evalsynth.py`: 자모 분리 정확도 측정 (`npm run dev -- --port 5179` 후 실행)

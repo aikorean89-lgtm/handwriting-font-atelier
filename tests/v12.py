@@ -21,7 +21,7 @@ with sync_playwright() as p:
     pg.get_by_role('button', name='폰트 만들기 시작').click(); pg.wait_for_timeout(300)
     pg.get_by_role('button', name='로 하기').click(); pg.wait_for_timeout(300)
     pg.get_by_role('button', name='다 썼어요, 찍으러 가기').click(); pg.wait_for_timeout(300)
-    pg.locator('[data-testid=sheet-file]').set_input_files(f'{T}/photo-q-pen.jpg')
+    pg.locator('[data-testid=sheet-file]').set_input_files(f'{T}/photo2-q-pen.jpg')
     pg.get_by_text('번 시트를 읽었어요').first.wait_for(timeout=120000)
     pg.get_by_role('button', name='다듬').click(); pg.wait_for_timeout(400)
     pg.get_by_role('button', name='자모 확인하기').click(); pg.wait_for_timeout(400)

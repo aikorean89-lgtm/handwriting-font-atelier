@@ -20,7 +20,7 @@ export interface Cell {
   labelsEdited?: boolean
   segCost?: number // 자동 분리 비용 (높을수록 의심)
 }
-export interface Sheet { no: number; preview: string; sharpness: number; capturedAt: number; cells: Cell[] }
+export interface Sheet { no: number; ver?: number /* 템플릿 버전, 없으면 v1 */; preview: string; sharpness: number; capturedAt: number; cells: Cell[] }
 export interface Project {
   tier: Tier
   fontName: string

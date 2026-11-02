@@ -1,4 +1,5 @@
-import layoutJson from '../data/template-layout.json'
+import layoutV1 from '../data/template-layout.json'
+import layoutV2 from '../data/template-layout-v2.json'
 
 export interface CellDef {
   index: number
@@ -15,7 +16,13 @@ export interface TemplateLayout {
   sheets: SheetDef[]
 }
 
-export const LAYOUT = layoutJson as unknown as TemplateLayout
+// v2: 칸 배치는 v1과 같고 글자만 다르다 (가나다…하, 자주 쓰는 글자 위주). 예전에 인쇄한 v1 시트도 계속 읽는다.
+export const LAYOUTS: Record<number, TemplateLayout> = {
+  1: layoutV1 as unknown as TemplateLayout,
+  2: layoutV2 as unknown as TemplateLayout,
+}
+export const TEMPLATE_VERSION = 2
+export const LAYOUT = LAYOUTS[TEMPLATE_VERSION]
 export const PX_PER_MM = 10
 export const PAGE_W = LAYOUT.page[0] * PX_PER_MM
 export const PAGE_H = LAYOUT.page[1] * PX_PER_MM
@@ -37,7 +44,7 @@ export function suppLabel(no: number) { return `보충 시트 ${no - SUPP_BASE}`
 export function registerSupplement(no: number, chars: string[]) { suppChars.set(no, chars.slice(0, SUPP_MAX)) }
 
 function supplementDef(no: number, chars: string[]): SheetDef {
-  const base = LAYOUT.sheets.find((s) => s.sheet === 2)!
+  const base = LAYOUTS[1].sheets.find((s) => s.sheet === 2)!
   const n = no - SUPP_BASE
   return {
     sheet: no, kind: 'supplement', qr: encodeSuppQr(n, chars),
@@ -45,12 +52,12 @@ function supplementDef(no: number, chars: string[]): SheetDef {
   }
 }
 
-export function sheetDef(no: number): SheetDef | undefined {
+export function sheetDef(no: number, ver: number = TEMPLATE_VERSION): SheetDef | undefined {
   if (isSupplement(no)) {
     const chars = suppChars.get(no)
     return chars ? supplementDef(no, chars) : undefined
   }
-  return LAYOUT.sheets.find((s) => s.sheet === no)
+  return (LAYOUTS[ver] ?? LAYOUT).sheets.find((s) => s.sheet === no)
 }
 
 /** 글자 → 영숫자 QR 부호 (한 글자당 base36 세 자리). 한글은 음절 번호, 그 밖은 11172 + 코드 */
@@ -72,13 +79,16 @@ function decodeSuppBody(body: string): string[] {
   return out
 }
 
-export interface QrInfo { no: number; chars?: string[] }
+export interface QrInfo { no: number; ver?: number; chars?: string[] }
 
 /** QR 문자열 → 시트 번호 (보충 시트면 글자 목록도) */
 export function parseQrInfo(text: string): QrInfo | null {
   const t = text.trim()
   const m = /^JAGUK\|v(\d+)\|(quick|standard)\|(\d{2})\/(\d{2})$/.exec(t)
-  if (m) return { no: parseInt(m[3], 10) }
+  if (m) {
+    const ver = parseInt(m[1], 10)
+    return LAYOUTS[ver] ? { no: parseInt(m[3], 10), ver } : null
+  }
   const s = /^JAGUK:V1:SUPP:(\d{2}):([0-9A-Z]+)$/.exec(t.toUpperCase())
   if (s) {
     const no = SUPP_BASE + parseInt(s[1], 10)

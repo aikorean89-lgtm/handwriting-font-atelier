@@ -10,7 +10,7 @@ with sync_playwright() as p:
     for w,h,n in [(1280,900,'d'),(390,844,'m'),(360,740,'s')]:
         ctx=b.new_context(viewport={'width':w,'height':h}); pg=ctx.new_page(); errs=[]; pg.on('pageerror', lambda e: errs.append(str(e)))
         pg.goto(BASE); pg.wait_for_timeout(2500)
-        ok(pg.get_by_text('만든이: 남성현초 교사 조은택').count()==1, f'{n}: footer credit')
+        ok(pg.locator('.topbar').get_by_text('(만든이: 남성현초 교사 조은택)').count()==1, f'{n}: credit next to brand')
         ok(pg.locator('.hub .hub-tab').count()==3, f'{n}: 3 hub tabs (gallery, growth, install)')
         ok(pg.locator('.hero-privacy').inner_text()=='사진은 이 기기 밖으로 나가지 않아요.', f'{n}: privacy on its own line')
         pg.locator('.hub').screenshot(path=f'{T}/shots/nav-hub-{n}.png')

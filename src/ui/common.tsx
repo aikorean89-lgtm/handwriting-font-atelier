@@ -21,7 +21,10 @@ export function TopBar({ step, onHome, onGallery, onStep, canStep }: {
       <div className="wrap topbar-in">
         <button className="brand" onClick={onHome} aria-label="폰트공방 처음 화면">
           <span className="brand-seal" aria-hidden>글</span>
-          <span className="brand-name">폰트공방</span>
+          <span className="brand-text">
+            <span className="brand-name">폰트공방</span>
+            <span className="brand-credit">(만든이: 남성현초 교사 조은택)</span>
+          </span>
         </button>
         {g >= 0 && (
           <ol className="steps" aria-label="진행 단계">

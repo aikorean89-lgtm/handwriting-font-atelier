@@ -632,3 +632,11 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .hub { max-width: 560px; }
 /* 좁은 휴대폰: 단계 번호가 다 보이도록 단계 화면에서는 상호 글자를 숨긴다 (도장은 남김) */
 @media (max-width: 440px) { .topbar.has-steps .brand-name { display: none; } }
+/* 상단: 상호 옆에 만든이 */
+.brand-text { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.brand-credit { font-size: 12.5px; color: var(--text-3); white-space: nowrap; letter-spacing: -0.01em; }
+@media (max-width: 1100px) { .topbar.has-steps .brand-credit { display: none; } }
+@media (max-width: 520px) {
+  .brand-text { flex-direction: column; align-items: flex-start; gap: 0; line-height: 1.15; }
+  .brand-credit { font-size: 10.5px; }
+}

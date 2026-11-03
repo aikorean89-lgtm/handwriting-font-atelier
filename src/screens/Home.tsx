@@ -109,10 +109,6 @@ export function Home({ work, onStartNew, onResume, onGallery, onGrowth }: { work
             <div><b>04</b><h3>다듬기</h3><p>잘못 잘린 칸과 자모만 고치기</p></div>
             <div><b>05</b><h3>완성</h3><p>문장으로 확인하고 TTF 내려받기</p></div>
           </section>
-          <footer className="site-foot">
-            <span className="brand-seal" aria-hidden>글</span>
-            <span>폰트공방 · 만든이: 남성현초 교사 조은택</span>
-          </footer>
         </div>
       </div>
     </>

@@ -186,13 +186,15 @@ function blobStore(): Store | null {
   // 예전 방식(읽기·쓰기 토큰)과 새 방식(BLOB_STORE_ID + 자동 OIDC 인증) 모두 받는다
   if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.BLOB_STORE_ID) return null
   let access: 'public' | 'private' = process.env.BLOB_ACCESS === 'private' ? 'private' : 'public'
-  const flip = (e: unknown) => access === 'public' && /private|access/i.test(String((e as Error)?.message ?? e))
-  // 공개로 시도해 보고, 비공개 저장소라서 거절되면 비공개로 바꿔 다시 한다
+  // 공개로 시도해 보고, 거절되면 비공개로 한 번 더 해 본다 (저장소 종류마다 오류 문구가 달라서 문구로 가르지 않는다)
   const both = async <T>(fn: (a: 'public' | 'private') => Promise<T>): Promise<T> => {
     try { return await fn(access) } catch (e) {
-      if (!flip(e)) throw e
-      access = 'private'
-      return fn('private')
+      if (access === 'private') throw e
+      try {
+        const r = await fn('private')
+        access = 'private'
+        return r
+      } catch { throw e }
     }
   }
   const fetchBlob = (u: string) => both(async (a) => {
@@ -211,6 +213,7 @@ function blobStore(): Store | null {
       let cursor: string | undefined
       do {
         const r = await list({ prefix, cursor, limit: 1000 })
+        for (const b of r.blobs) if (/\.private\./.test(b.url)) access = 'private'
         for (const b of r.blobs) out.push({ pathname: b.pathname, url: b.url, uploadedAt: new Date(b.uploadedAt).getTime() })
         cursor = r.hasMore ? r.cursor : undefined
       } while (cursor && out.length < 5000)

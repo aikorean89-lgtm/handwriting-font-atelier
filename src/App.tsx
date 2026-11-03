@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { TopBar } from './ui/common'
+import { GROUP, TopBar } from './ui/common'
 import { Home } from './screens/Home'
 import { TierScreen } from './screens/Tier'
 import { TemplateScreen } from './screens/Template'
@@ -41,8 +41,13 @@ export default function App() {
     saveTimer.current = window.setTimeout(() => saveProject({ ...project, step, updatedAt: Date.now() }), 600)
   }, [project, step])
 
+  // 단계 막대에서 돌아가기: 단계마다 마지막으로 머문 화면, 가 본 가장 먼 단계
+  const lastInGroup = useRef<Record<number, Step>>({})
+  const [furthest, setFurthest] = useState(-1)
   const go = useCallback((s: Step) => {
     setStep(s); window.scrollTo({ top: 0 })
+    const g = GROUP[s]
+    if (g >= 0) { lastInGroup.current[g] = s; setFurthest((f) => Math.max(f, g)) }
     // 갤러리는 주소로 바로 열 수 있게
     if (s === 'gallery' && !location.hash.startsWith('#gallery')) history.pushState(null, '', '#gallery')
     else if (s !== 'gallery' && location.hash.startsWith('#gallery')) history.pushState(null, '', location.pathname + location.search)
@@ -114,6 +119,7 @@ export default function App() {
   }, [project, update, applyResult])
 
   const restart = async () => {
+    lastInGroup.current = {}; setFurthest(-1)
     await clearProject()
     setSaved(null); setProject(null); setResult(null)
     document.documentElement.style.removeProperty('--font-user')
@@ -136,6 +142,25 @@ export default function App() {
     }).catch(() => setReseg(null))
   }, [project, segStep, reseg])
 
+  // 위 단계 막대: 01 고르기 · 02 쓰기 · 03 찍기 · 04 다듬기 · 05 완성
+  const hasCells = !!project && Object.values(project.sheets).some((sh) => sh.cells.length)
+  const canStep = (i: number): boolean => {
+    if (!project) return false
+    if (i === 1 && project.tier === 'letter') return false // 손편지 모드에는 '쓰기'가 없다
+    if (i >= 3 && !hasCells) return false
+    if (i === 4 && !result && furthest < 4) return false
+    return i <= Math.max(furthest, GROUP[step])
+  }
+  const goGroup = (i: number) => {
+    if (!project || !canStep(i)) return
+    const last = lastInGroup.current[i]
+    if (i === 0) go('tier')
+    else if (i === 1) go('template')
+    else if (i === 2) go(project.tier === 'letter' ? 'letter' : last === 'draw' ? 'draw' : 'capture')
+    else if (i === 3) go(last === 'jamo' ? 'jamo' : 'review')
+    else go(result ? (last === 'export' ? 'export' : 'play') : 'build')
+  }
+
   let screen: React.ReactNode = null
   if (step === 'gallery') {
     screen = <GalleryScreen onMake={() => go(project || saved ? 'home' : 'tier')} />
@@ -152,6 +177,7 @@ export default function App() {
         onResume={() => {
           if (!work) return
           setProject(work)
+          setFurthest((f) => Math.max(f, GROUP[work.step] ?? -1, Object.keys(work.sheets).length ? 3 : -1))
           const s = project ? lastStep.current : work.step
           if ((s === 'play' || s === 'export') && result) { go(s); return }
           go(s === 'play' || s === 'export' ? 'build' : s === 'home' || s === 'tier' ? 'template' : s)
@@ -198,7 +224,7 @@ export default function App() {
 
   return (
     <>
-      <TopBar step={step} onHome={goHome} onGallery={() => go('gallery')} />
+      <TopBar step={step} onHome={goHome} onGallery={() => go('gallery')} onStep={goGroup} canStep={canStep} />
       {screen}
     </>
   )

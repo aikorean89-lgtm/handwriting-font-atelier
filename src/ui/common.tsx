@@ -8,13 +8,16 @@ export const FLOW: { step: Step; n: string; label: string }[] = [
   { step: 'review', n: '04', label: '다듬기' },
   { step: 'build', n: '05', label: '완성' },
 ]
-const GROUP: Record<Step, number> = { home: -1, tier: 0, template: 1, capture: 2, draw: 2, letter: 2, review: 3, jamo: 3, build: 4, play: 4, export: 4, gallery: -1, growth: -1 }
+export const GROUP: Record<Step, number> = { home: -1, tier: 0, template: 1, capture: 2, draw: 2, letter: 2, review: 3, jamo: 3, build: 4, play: 4, export: 4, gallery: -1, growth: -1 }
 
-export function TopBar({ step, onHome, onGallery }: { step: Step; onHome: () => void; onGallery: () => void }) {
+/** canStep(i): i번째 단계로 갈 수 있는지 (이미 지나온 단계, 또는 다녀온 다음 단계) */
+export function TopBar({ step, onHome, onGallery, onStep, canStep }: {
+  step: Step; onHome: () => void; onGallery: () => void; onStep?: (i: number) => void; canStep?: (i: number) => boolean
+}) {
   const g = GROUP[step]
   const home = step !== 'home'
   return (
-    <header className="topbar">
+    <header className={`topbar ${g >= 0 ? 'has-steps' : ''}`}>
       <div className="wrap topbar-in">
         <button className="brand" onClick={onHome} aria-label="폰트공방 처음 화면">
           <span className="brand-seal" aria-hidden>글</span>
@@ -22,11 +25,18 @@ export function TopBar({ step, onHome, onGallery }: { step: Step; onHome: () => 
         </button>
         {g >= 0 && (
           <ol className="steps" aria-label="진행 단계">
-            {FLOW.map((f, i) => (
-              <li key={f.n} className={i === g ? 'on' : i < g ? 'done' : ''} aria-current={i === g ? 'step' : undefined}>
-                <b>{f.n}</b><span>{f.label}</span>
-              </li>
-            ))}
+            {FLOW.map((f, i) => {
+              const can = i !== g && !!onStep && !!canStep?.(i)
+              return (
+                <li key={f.n} className={`${i === g ? 'on' : i < g ? 'done' : ''} ${can ? 'can' : ''}`} aria-current={i === g ? 'step' : undefined}>
+                  {can ? (
+                    <button onClick={() => onStep!(i)} title={`${f.n} ${f.label}${i < g ? '(으)로 돌아가기' : '(으)로 가기'}`} aria-label={`${f.n} ${f.label} 단계로 ${i < g ? '돌아가기' : '가기'}`}>
+                      <b>{f.n}</b><span>{f.label}</span>
+                    </button>
+                  ) : <><b>{f.n}</b><span>{f.label}</span></>}
+                </li>
+              )
+            })}
           </ol>
         )}
         <div className="topbar-right">

@@ -75,6 +75,10 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .steps li.on { color: var(--text); }
 .steps li.on b { font-weight: 700; }
 .steps li.done { color: var(--text-2); }
+.steps li.can { padding: 0; }
+.steps li button { display: flex; align-items: baseline; gap: 6px; padding: 6px 8px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; border-bottom: 2px solid transparent; }
+.steps li button:hover, .steps li button:focus-visible { color: var(--seal); border-bottom-color: var(--seal); }
+.steps li.can:not(.done) { color: var(--text-3); }
 .home-btn {
   flex-shrink: 0; height: 34px; padding: 0 12px; border: 1px solid var(--line-strong); background: var(--surface);
   cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-2); display: inline-flex; align-items: center; gap: 6px;
@@ -88,8 +92,13 @@ button, input, textarea, select { font: inherit; color: inherit; }
   .brand-name { font-size: 17px; }
 }
 @media (max-width: 600px) {
-  .steps li:not(.on) { display: none; }
-  .steps li.on b::after { content: '/05'; font-weight: 300; color: var(--text-3); }
+  /* 휴대폰: 단계 번호만 보이고, 누르면 그 단계로 */
+  .steps { gap: 0; }
+  .steps li { padding: 6px 4px; }
+  .steps li button { padding: 6px 4px; }
+  .steps li span, .steps li.on span { display: none; }
+  .steps li b { font-size: 14px; }
+  .steps li.on b { border-bottom: 2px solid var(--text); }
 }
 @media (max-width: 420px) { .home-btn span { display: none; } .home-btn { padding: 0 9px; } }
 
@@ -594,3 +603,32 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .tools > .tabs { margin-top: 0; position: sticky; top: 56px; z-index: 5; background: var(--bg); }
 .tools > [role='tabpanel'] > section:first-child { margin-top: 24px; }
 .tools > [role='tabpanel'] > .supp { margin-top: 32px; }
+/* 첫 화면: 갤러리·성장 기록·앱 설치를 한 줄의 탭으로 */
+.hero-copy p.hero-privacy { margin-top: 14px; font-size: 16px; }
+.hub { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin: 22px 0 0; max-width: 620px; }
+.hub-tab { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 14px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); text-align: left; cursor: pointer; transition: border-color 120ms ease, background 120ms ease; }
+.hub-tab svg { width: 22px; height: 22px; flex-shrink: 0; color: var(--seal); }
+.hub-tab span { display: grid; gap: 2px; min-width: 0; }
+.hub-tab b { font-size: 15px; }
+.hub-tab small { font-size: 12.5px; color: var(--text-3); }
+.hub-tab:hover, .hub-tab:focus-visible { border-color: var(--seal); background: color-mix(in srgb, var(--seal) 5%, var(--surface)); }
+.hub-tab.accent { border: 1.5px solid var(--seal); background: color-mix(in srgb, var(--seal) 7%, var(--surface)); }
+.hub-tab.accent b { color: var(--seal); }
+.hub-tab[aria-expanded='true'] { border-color: var(--text); }
+.install-help { margin: 10px 0 0; max-width: 620px; padding: 12px 16px; border: 1px solid var(--line); background: var(--surface); font-size: 14px; color: var(--text-2); }
+.install-help ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.install-help p { margin: 0; font-size: 14px; max-width: none; }
+.site-foot { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 28px 0 36px; margin-top: 8px; border-top: 1px solid var(--line); color: var(--text-2); font-size: 14px; }
+.site-foot .brand-seal { width: 22px; height: 22px; font-size: 13px; }
+.hero-copy { min-width: 0; }
+.hub { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.hub:has(> :nth-child(2):last-child) { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 420px; }
+@media (max-width: 640px) {
+  .hub-tab { flex-direction: column; align-items: center; text-align: center; gap: 6px; min-height: 84px; padding: 10px 6px; }
+  .hub-tab span { justify-items: center; }
+  .hub-tab b { font-size: 14px; line-height: 1.3; word-break: keep-all; }
+  .hub-tab small { display: none; }
+}
+.hub { max-width: 560px; }
+/* 좁은 휴대폰: 단계 번호가 다 보이도록 단계 화면에서는 상호 글자를 숨긴다 (도장은 남김) */
+@media (max-width: 440px) { .topbar.has-steps .brand-name { display: none; } }

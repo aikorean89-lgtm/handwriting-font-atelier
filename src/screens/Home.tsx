@@ -12,6 +12,7 @@ const QUICK_CHARS = LAYOUT.sheets[0].cells.map((c) => c.char ?? '').join('')
 export function Home({ work, onStartNew, onResume, onGallery, onGrowth }: { work: Project | null; onStartNew: () => void; onResume: () => void; onGallery: () => void; onGrowth: () => void }) {
   const [confirm, setConfirm] = useState(false)
   const pwa = usePwa()
+  const [installHelp, setInstallHelp] = useState(false)
   // 빠른 모드 90자가 11,172자 중 어디에 놓이는지 보여주는 모자이크
   const direct = useMemo(() => new Set([...QUICK_CHARS].map((c) => c.codePointAt(0)! - 0xac00)), [])
   const sheets = work ? Object.keys(work.sheets).length : 0
@@ -46,26 +47,45 @@ export function Home({ work, onStartNew, onResume, onGallery, onGrowth }: { work
                 </div>
               )}
               <h1>종이에 쓴 내 글씨가 폰트가 됩니다</h1>
-              <p>템플릿 한 장에 90자를 쓰고 휴대폰으로 찍으세요. 현대 한글 11,172자가 모두 들어간 TTF 파일이 나옵니다. 사진은 이 기기 밖으로 나가지 않아요.</p>
+              <p>템플릿 한 장에 90자를 쓰고 휴대폰으로 찍으세요. 현대 한글 11,172자가 모두 들어간 TTF 파일이 나옵니다.</p>
+              <p className="hero-privacy">사진은 이 기기 밖으로 나가지 않아요.</p>
               <div className="actions">
                 {!work && <button className="btn primary" onClick={onStartNew}>폰트 만들기 시작</button>}
                 <TemplateButton className={work ? 'btn' : 'btn quiet'} label="템플릿만 받기" />
               </div>
-              <p className="hero-gallery">
-                <button className="btn gallery-cta" onClick={onGallery}>
+              <nav className="hub" aria-label="더 둘러보기">
+                <button className="hub-tab accent" onClick={onGallery}>
                   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><rect x="2" y="2" width="5" height="5" /><rect x="9" y="2" width="5" height="5" /><rect x="2" y="9" width="5" height="5" /><rect x="9" y="9" width="5" height="5" /></svg>
-                  다른 사람들이 만든 글씨체 갤러리
+                  <span><b>글씨체 갤러리</b><small>다른 사람들이 만든 글씨</small></span>
                 </button>
-                <button className="linkish growth-link" onClick={onGrowth}>내 글씨 성장 기록 →</button>
-              </p>
-              {pwa.supported && !pwa.installed && (pwa.canInstall || pwa.iosHint) && (
-                <p className="pwa-hint">
-                  {pwa.canInstall
-                    ? <><button className="linkish" onClick={() => pwa.install()}>앱으로 설치하기</button> · 인터넷이 없는 교실에서도 쓸 수 있어요.</>
-                    : <>아이폰·아이패드: Safari의 공유 단추 → <b>홈 화면에 추가</b>를 누르면 앱처럼 쓰고, 인터넷이 없어도 열려요.</>}
-                </p>
+                <button className="hub-tab" onClick={onGrowth}>
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><path d="M2 13.5h12M3.5 11l3-3.5 2.5 2 4-5" /><path d="M10.5 4.5H13V7" /></svg>
+                  <span><b>내 글씨 성장 기록</b><small>날짜별로 나란히 비교</small></span>
+                </button>
+                {pwa.supported && (
+                  <button className="hub-tab" aria-expanded={installHelp} onClick={async () => {
+                    if (pwa.installed) { setInstallHelp((v) => !v); return }
+                    if (pwa.canInstall && (await pwa.install())) return
+                    setInstallHelp((v) => !v)
+                  }}>
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><rect x="4" y="1.5" width="8" height="13" rx="1.5" /><path d="M8 4.5v5M5.8 7.5 8 9.7l2.2-2.2M7 12.5h2" /></svg>
+                    <span><b>{pwa.installed ? '앱으로 설치됨' : '앱으로 설치하기'}</b><small>{pwa.installed ? '인터넷 없이도 열려요' : '인터넷 없는 교실에서도'}</small></span>
+                  </button>
+                )}
+              </nav>
+              {pwa.supported && installHelp && (
+                <div className="install-help" role="region" aria-label="앱 설치 방법">
+                  {pwa.installed ? (
+                    <p>이 기기에 앱으로 설치되어 있어요. 인터넷이 없어도 시트 찍기부터 폰트 만들기까지 할 수 있어요. (갤러리는 인터넷이 필요해요)</p>
+                  ) : (
+                    <ul>
+                      <li><b>아이폰·아이패드 (Safari)</b> 아래쪽 공유 단추 → <b>홈 화면에 추가</b></li>
+                      <li><b>안드로이드 (크롬·삼성 인터넷)</b> 오른쪽 위 메뉴 → <b>앱 설치</b> 또는 <b>홈 화면에 추가</b></li>
+                      <li><b>컴퓨터 (크롬·엣지)</b> 주소창 오른쪽의 설치 아이콘 → <b>설치</b></li>
+                    </ul>
+                  )}
+                </div>
               )}
-              {pwa.installed && pwa.offline && <p className="pwa-hint">앱으로 설치됨 · 인터넷이 없어도 폰트를 만들 수 있어요. (갤러리는 인터넷이 필요해요)</p>}
             </div>
             <HeroGlyph ch="한" />
           </section>
@@ -89,6 +109,10 @@ export function Home({ work, onStartNew, onResume, onGallery, onGrowth }: { work
             <div><b>04</b><h3>다듬기</h3><p>잘못 잘린 칸과 자모만 고치기</p></div>
             <div><b>05</b><h3>완성</h3><p>문장으로 확인하고 TTF 내려받기</p></div>
           </section>
+          <footer className="site-foot">
+            <span className="brand-seal" aria-hidden>글</span>
+            <span>폰트공방 · 만든이: 남성현초 교사 조은택</span>
+          </footer>
         </div>
       </div>
     </>

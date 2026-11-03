@@ -11,8 +11,11 @@ import { PlayScreen } from './screens/Play'
 import { ExportScreen } from './screens/Export'
 import { GalleryScreen } from './screens/Gallery'
 import { DrawScreen } from './screens/Draw'
+import { GrowthScreen } from './screens/Growth'
+import { LetterScreen } from './screens/Letter'
 import { type Cell, type Project, type Sheet, type Step, buildCells, clearProject, loadProject, needsResegment, newProject, resegment, saveProject } from './state'
 import { type BuildOptions, type BuildResult, buildFont } from './engine/build'
+import type { SourceCell } from './engine/model'
 import { SUPP_BASE, sheetDef } from './engine/template'
 import { isHangul } from './engine/hangul'
 import { segmentScored } from './engine/segment'
@@ -136,6 +139,8 @@ export default function App() {
   let screen: React.ReactNode = null
   if (step === 'gallery') {
     screen = <GalleryScreen onMake={() => go(project || saved ? 'home' : 'tier')} />
+  } else if (step === 'growth') {
+    screen = <GrowthScreen onMake={() => go(project || saved ? 'home' : 'tier')} />
   } else if (step === 'home' || !project && step !== 'tier') {
     const work = project ?? saved
     screen = (
@@ -143,6 +148,7 @@ export default function App() {
         work={work}
         onStartNew={restart}
         onGallery={() => go('gallery')}
+        onGrowth={() => go('growth')}
         onResume={() => {
           if (!work) return
           setProject(work)
@@ -153,7 +159,7 @@ export default function App() {
       />
     )
   } else if (step === 'tier') {
-    screen = <TierScreen initial={project?.tier} onPick={(t) => { setProject((p) => (p ? { ...p, tier: t } : newProject(t))); go('template') }} />
+    screen = <TierScreen initial={project?.tier} onPick={(t) => { setProject((p) => (p ? { ...p, tier: t } : newProject(t))); go(t === 'letter' ? 'letter' : 'template') }} />
   } else if (project && segStep && (reseg || needsResegment(project))) {
     screen = (
       <main className="wrap screen">
@@ -167,13 +173,14 @@ export default function App() {
   } else if (project) {
     if (step === 'template') screen = <TemplateScreen tier={project.tier} onNext={() => go('capture')} onDraw={() => go('draw')} />
     if (step === 'capture') screen = <CaptureScreen project={project} onSheet={onSheet} onNext={() => go('review')} onDraw={() => go('draw')} />
+    if (step === 'letter') screen = <LetterScreen project={project} onSheet={onSheet} onNext={() => go('review')} />
     if (step === 'draw') screen = <DrawScreen project={project} onSheet={onSheet} onNext={() => go('review')} onBack={() => go('template')} />
     if (step === 'review') screen = <ReviewScreen project={project} onCell={onCell} onNext={() => go('jamo')} onBack={() => go('capture')} />
     if (step === 'jamo') screen = <JamoScreen project={project} onCell={onCell} onNext={() => go('build')} onBack={() => go('review')} />
     if (step === 'build') screen = <BuildScreen project={project} onDone={onBuilt} onBack={() => go('jamo')} />
     if (step === 'play') screen = result ? (
       <PlayScreen
-        result={result} flagged={project.flagged} settings={project.settings ?? {}} rebuilding={rebuilding} supps={project.supps ?? {}} edits={project.edits ?? {}}
+        result={result} cells={buildCells(project).filter((c) => c.labels && c.index >= 0) as SourceCell[]} allCells={buildCells(project).filter((c) => c.index >= 0)} flagged={project.flagged} settings={project.settings ?? {}} rebuilding={rebuilding} supps={project.supps ?? {}} edits={project.edits ?? {}}
         onFlag={(f) => update((p) => ({ ...p, flagged: f }))} onRebuild={rebuild} onSupp={(s) => update((p) => ({ ...p, supps: s }))}
         onEdit={(ch, bm) => {
           const edits = { ...(project.edits ?? {}) }
@@ -185,7 +192,7 @@ export default function App() {
         onCapture={() => go('capture')} onNext={() => go('export')} onRedo={() => go('jamo')}
       />
     ) : null
-    if (step === 'export') screen = result ? <ExportScreen result={result} name={project.fontName} onName={(n) => update((p) => ({ ...p, fontName: n }))} onGallery={() => go('gallery')} /> : null
+    if (step === 'export') screen = result ? <ExportScreen result={result} name={project.fontName} onName={(n) => update((p) => ({ ...p, fontName: n }))} onGallery={() => go('gallery')} onGrowth={() => go('growth')} /> : null
     if ((step === 'play' || step === 'export') && !result) screen = <BuildScreen project={project} onDone={onBuilt} onBack={() => go('jamo')} />
   }
 

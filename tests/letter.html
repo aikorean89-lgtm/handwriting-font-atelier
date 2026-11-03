@@ -1,0 +1,28 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../node_modules/@fontsource/gaegu/400.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/nanum-pen-script/index.css">
+</head><body><script type="module">
+// 공책 줄 위에 손글씨 글꼴로 쓴 가상 손편지 사진
+window.letter = async (lines, o = {}) => {
+  const font = o.font || 'Gaegu', size = o.size || 86, gap = o.gap ?? 10
+  await document.fonts.load(`64px "${font}"`, lines.join(''))
+  const W = 1800, H = 1300, c = document.createElement('canvas'); c.width = W; c.height = H
+  const x = c.getContext('2d')
+  const g = x.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#f6f1e4'); g.addColorStop(1, '#ddd6c4'); x.fillStyle = g; x.fillRect(0, 0, W, H)
+  x.strokeStyle = 'rgba(90,140,200,0.55)'; x.lineWidth = 2
+  for (let y = 210; y < H - 60; y += 130) { x.beginPath(); x.moveTo(40, y); x.lineTo(W - 40, y); x.stroke() }
+  x.fillStyle = '#20263a'; x.font = `${size}px "${font}"`
+  let s = 3
+  const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647 }
+  lines.forEach((l, i) => {
+    let cx = 120
+    for (const ch of l) {
+      if (ch === ' ') { cx += 46; continue }
+      x.save(); x.translate(cx, 190 + i * 130 + (rnd() - 0.5) * 6); x.rotate((rnd() - 0.5) * 0.06); x.fillText(ch, 0, 0); x.restore()
+      cx += x.measureText(ch).width + gap + rnd() * 8
+    }
+  })
+  return c.toDataURL('image/jpeg', 0.88)
+}
+window.ready = true
+</script></body></html>

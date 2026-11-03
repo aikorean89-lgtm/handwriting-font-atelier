@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { HeroGlyph } from '../ui/HeroGlyph'
+import { usePwa } from '../pwa'
 import { Mosaic } from '../ui/Mosaic'
 import { SCOUNT } from '../engine/hangul'
 import type { Project } from '../state'
@@ -8,8 +9,9 @@ import { TemplateButton } from '../ui/TemplateButton'
 
 const QUICK_CHARS = LAYOUT.sheets[0].cells.map((c) => c.char ?? '').join('')
 
-export function Home({ work, onStartNew, onResume, onGallery }: { work: Project | null; onStartNew: () => void; onResume: () => void; onGallery: () => void }) {
+export function Home({ work, onStartNew, onResume, onGallery, onGrowth }: { work: Project | null; onStartNew: () => void; onResume: () => void; onGallery: () => void; onGrowth: () => void }) {
   const [confirm, setConfirm] = useState(false)
+  const pwa = usePwa()
   // 빠른 모드 90자가 11,172자 중 어디에 놓이는지 보여주는 모자이크
   const direct = useMemo(() => new Set([...QUICK_CHARS].map((c) => c.codePointAt(0)! - 0xac00)), [])
   const sheets = work ? Object.keys(work.sheets).length : 0
@@ -54,7 +56,16 @@ export function Home({ work, onStartNew, onResume, onGallery }: { work: Project 
                   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><rect x="2" y="2" width="5" height="5" /><rect x="9" y="2" width="5" height="5" /><rect x="2" y="9" width="5" height="5" /><rect x="9" y="9" width="5" height="5" /></svg>
                   다른 사람들이 만든 글씨체 갤러리
                 </button>
+                <button className="linkish growth-link" onClick={onGrowth}>내 글씨 성장 기록 →</button>
               </p>
+              {pwa.supported && !pwa.installed && (pwa.canInstall || pwa.iosHint) && (
+                <p className="pwa-hint">
+                  {pwa.canInstall
+                    ? <><button className="linkish" onClick={() => pwa.install()}>앱으로 설치하기</button> · 인터넷이 없는 교실에서도 쓸 수 있어요.</>
+                    : <>아이폰·아이패드: Safari의 공유 단추 → <b>홈 화면에 추가</b>를 누르면 앱처럼 쓰고, 인터넷이 없어도 열려요.</>}
+                </p>
+              )}
+              {pwa.installed && pwa.offline && <p className="pwa-hint">앱으로 설치됨 · 인터넷이 없어도 폰트를 만들 수 있어요. (갤러리는 인터넷이 필요해요)</p>}
             </div>
             <HeroGlyph ch="한" />
           </section>

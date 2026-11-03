@@ -3,13 +3,15 @@
 import { loadCV } from './cv'
 import { type Bitmap, inkBox } from './bitmap'
 import { COMPAT_JAMO, SBASE, SCOUNT, isHangul } from './hangul'
-import { Library, type Sample, type SourceCell } from './model'
+import { type KeepFn, Library, type Sample, type SourceCell } from './model'
 import { ensureRefFont } from './refmask'
 import { buildTTF, signedArea, type TGlyph, type TPoint } from './ttf'
 import { type VContour, vectorize } from './vectorize'
 import { AUTO_PUNCT, drawPunct, penWidth, textMetrics } from './punct'
 
-export interface BuildCell { index: number; char: string; bitmap: Bitmap; labels?: Uint8Array; segCost?: number; edited?: boolean; raw?: boolean /* 손본 글자: 굵기 조절을 다시 하지 않는다 */ }
+export interface BuildCell { index: number; char: string; bitmap: Bitmap; labels?: Uint8Array; segCost?: number; edited?: boolean; raw?: boolean /* 손본 글자: 굵기 조절을 다시 하지 않는다 */; src?: 'A' | 'B' }
+/** 두 글씨 섞기: 직접 쓴 한글을 그대로 쓰지 않고, 자모마다 정한 사람의 부품으로만 조합한다 */
+export interface MixOptions { keep: KeepFn; noDirectHangul: boolean }
 export interface BuildProgress { phase: 'prepare' | 'vector' | 'compose' | 'write' | 'done'; done: number; total: number; direct?: Set<number>; composedUpTo?: number }
 export interface BuildResult {
   ttf: Uint8Array
@@ -41,18 +43,18 @@ export function postscriptName(family: string): string {
   return `FontGongbang-${ascii.slice(0, 18) || 'Hand'}${h.toString(36).slice(0, 6)}`
 }
 
-export async function buildFont(cellsIn: BuildCell[], family: string, onProgress: (p: BuildProgress) => void, opts: BuildOptions = {}): Promise<BuildResult> {
+export async function buildFont(cellsIn: BuildCell[], family: string, onProgress: (p: BuildProgress) => void, opts: BuildOptions = {}, mix?: MixOptions): Promise<BuildResult> {
   const cv = await loadCV()
   onProgress({ phase: 'prepare', done: 0, total: 1 })
   const weight = Math.max(-3, Math.min(6, Math.round(opts.weight ?? 0)))
   const tracking = Math.max(-100, Math.min(200, Math.round(opts.tracking ?? 0)))
   // 같은 글자를 여러 번 쓴 경우(보충 시트) 나중 칸의 글씨를 쓴다. 자모 샘플로는 모두 쓴다
   const lastByChar = new Map<string, BuildCell>()
-  for (const c of cellsIn) lastByChar.set(c.char, c)
+  for (const c of cellsIn) if (!mix || c.src !== 'B') lastByChar.set(c.char, c)
   const cells = [...lastByChar.values()]
   const hangulCells = cellsIn.filter((c) => isHangul(c.char) && c.labels) as Required<BuildCell>[]
   await ensureRefFont(hangulCells.map((c) => c.char).join(''))
-  const lib = new Library(hangulCells as SourceCell[])
+  const lib = new Library(hangulCells as SourceCell[], mix?.keep)
 
   // 전체 정규화: 직접 쓴 한글의 중앙값 크기·위치
   const boxes = hangulCells.map((c) => inkBox(c.bitmap)).filter(Boolean).map((b, i) => {
@@ -122,6 +124,7 @@ export async function buildFont(cellsIn: BuildCell[], family: string, onProgress
   for (let i = 0; i < cells.length; i++) {
     const c = cells[i]
     const cp = c.char.codePointAt(0)!
+    if (mix?.noDirectHangul && isHangul(c.char)) continue
     const cs = vectorize(cv, c.bitmap, undefined, undefined, 1, c.raw ? 0 : weight)
     if (!cs.length) continue
     if (isHangul(c.char)) {

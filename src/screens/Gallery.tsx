@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { type GalleryFont, GalleryError, gallery } from '../gallery/backend'
+import { type GalleryFont, GalleryError, gallery, rememberSpace, savedSpace } from '../gallery/backend'
 import { PREVIEW_LINES } from '../gallery/preview'
 import { MAX_TAGS, TAGS } from '../gallery/tags'
 import { SaveDeclined, saveFile } from '../platform'
 import { InstallGuide } from '../ui/InstallGuide'
+import { StickerMaker } from '../ui/Sticker'
 
 const fmtDate = (t: number) => new Date(t).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
 type Sort = 'new' | 'popular'
@@ -44,10 +45,19 @@ export function GalleryScreen({ onMake }: { onMake: () => void }) {
   const [unlocked, setUnlocked] = useState(false)
   const [askUnlock, setAskUnlock] = useState(false)
   const [likeErr, setLikeErr] = useState<string | null>(null)
+  // 우리 학교 공간: 코드를 넣으면 그 공간에 올린 글씨체만 보인다
+  const [space, setSpace] = useState(() => savedSpace())
+  const [spaceDraft, setSpaceDraft] = useState('')
+  const [spaceOpen, setSpaceOpen] = useState(false)
 
-  const load = () => {
-    setErr(null)
-    gallery().list().then(setFonts).catch((e) => { setErr(e instanceof GalleryError ? e.message : '갤러리를 불러오지 못했어요.'); setFonts([]) })
+  const load = (sp = space) => {
+    setErr(null); setFonts(null)
+    gallery().list(sp || undefined).then(setFonts).catch((e) => { setErr(e instanceof GalleryError ? e.message : '갤러리를 불러오지 못했어요.'); setFonts([]) })
+  }
+  const enterSpace = (code: string) => {
+    const c = code.trim()
+    if (c && (c.length < 2 || c.length > 30)) { setErr('공간 코드는 2–30자예요.'); return }
+    setSpace(c); rememberSpace(c); setSpaceOpen(false); setTag(null); load(c)
   }
   useEffect(() => {
     // 관리자 열쇠: 주소 끝에 #gallery?admin=열쇠 를 한 번 붙여 열면 이 브라우저에 기억한다
@@ -99,7 +109,22 @@ export function GalleryScreen({ onMake }: { onMake: () => void }) {
           <button aria-pressed={sort === 'popular'} onClick={() => setSort('popular')}>인기순</button>
         </div>
         <span className="note count" aria-live="polite">{fonts ? `${shown.length}개` : '불러오는 중'}</span>
+        {!space && !spaceOpen && <button className="btn small quiet space-btn" onClick={() => { setSpaceOpen(true); setSpaceDraft('') }}>🏫 우리 학교 공간</button>}
       </div>
+      {spaceOpen && (
+        <div className="space-bar">
+          <span>학교·학급에서 정한 <b>공간 코드</b>를 넣으면, 그 공간에 올린 글씨체만 모아 볼 수 있어요. 공간의 글씨체는 전체 갤러리에는 보이지 않아요.</span>
+          <input value={spaceDraft} maxLength={30} placeholder="예: 남성현초2026" aria-label="공간 코드" onChange={(e) => setSpaceDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') enterSpace(spaceDraft) }} />
+          <button className="btn small primary" onClick={() => enterSpace(spaceDraft)} disabled={spaceDraft.trim().length < 2}>들어가기</button>
+          <button className="btn small quiet" onClick={() => setSpaceOpen(false)}>취소</button>
+        </div>
+      )}
+      {space && (
+        <div className="space-bar in">
+          <span>🏫 <b>{space}</b> 공간 · 이 공간에 올린 글씨체만 보여요. 올릴 때 같은 코드를 넣으면 여기에 모여요.</span>
+          <button className="btn small" onClick={() => enterSpace('')}>전체 갤러리로</button>
+        </div>
+      )}
       <div className="chips tag-filter" role="group" aria-label="태그로 거르기">
         <button className={`chip ${tag == null ? 'on' : ''}`} aria-pressed={tag == null} onClick={() => setTag(null)}>전체</button>
         {TAGS.map((t) => (
@@ -117,13 +142,13 @@ export function GalleryScreen({ onMake }: { onMake: () => void }) {
         </div>
       )}
 
-      {err && <div className="error" role="alert">{err} <button className="btn small quiet" onClick={load}>다시 불러오기</button></div>}
+      {err && <div className="error" role="alert">{err} <button className="btn small quiet" onClick={() => load()}>다시 불러오기</button></div>}
       {likeErr && <div className="error" role="alert">{likeErr}</div>}
 
       {fonts && !err && fonts.length === 0 && (
         <div className="gallery-empty">
           <span className="seal-big" aria-hidden>글</span>
-          <p><b>아직 올라온 글씨체가 없어요.</b><br />처음으로 내 손글씨를 올려 보세요. 마지막 단계에서 공개를 고르면 여기에 보여요.</p>
+          <p><b>{space ? `‘${space}’ 공간에 아직 올라온 글씨체가 없어요.` : '아직 올라온 글씨체가 없어요.'}</b><br />{space ? '폰트를 만들고 마지막 단계에서 ‘우리 학교 공간에만’을 고른 뒤 같은 코드를 넣으세요.' : '처음으로 내 손글씨를 올려 보세요. 마지막 단계에서 공개를 고르면 여기에 보여요.'}</p>
           <button className="btn primary" onClick={onMake}>폰트 만들기</button>
         </div>
       )}
@@ -173,6 +198,7 @@ function FontDetail({ font, canRemove, asAdmin, onLike, onTags, onClose, onRemov
   const [confirm, setConfirm] = useState(false)
   const [editTags, setEditTags] = useState<string[] | null>(null)
   const [guide, setGuide] = useState(false)
+  const [sticker, setSticker] = useState(false)
   const ref = useRef<HTMLDialogElement>(null)
   const bytes = useRef<Promise<Uint8Array> | null>(null)
   const getTtf = () => {
@@ -242,11 +268,13 @@ function FontDetail({ font, canRemove, asAdmin, onLike, onTags, onClose, onRemov
       <div className="actions">
         <button className="btn primary" onClick={download}>TTF 내려받기</button>
         <button className="btn quiet" onClick={() => setGuide((g) => !g)} aria-expanded={guide}>설치 방법·웹폰트</button>
+        {fam && <button className="btn quiet" onClick={() => setSticker((g) => !g)} aria-expanded={sticker}>스티커 만들기</button>}
         {font.mine && !editTags && <button className="btn quiet" onClick={() => setEditTags(font.tags)}>태그 고치기</button>}
         {canRemove && !confirm && <button className="btn quiet" onClick={() => setConfirm(true)}>{asAdmin ? '관리자 권한으로 내리기' : '갤러리에서 내리기'}</button>}
         {confirm && <><button className="btn danger" onClick={remove}>정말 내리기</button><button className="btn quiet" onClick={() => setConfirm(false)}>취소</button></>}
         {msg && <span className="note" role="status" style={{ alignSelf: 'center' }}>{msg}</span>}
       </div>
+      {sticker && fam && <StickerMaker family={fam} fontName={font.name} />}
       {guide && <InstallGuide family={font.name} getTtf={getTtf} />}
       <p className="note">갤러리의 글씨체는 쓴 사람의 것이에요. 개인 문서나 수업 자료에 쓰고, 다시 팔거나 다른 이름으로 퍼뜨리지 마세요.{!font.mine && ' 내리기는 글씨체를 올린 사람만 할 수 있어요.'}</p>
     </dialog>

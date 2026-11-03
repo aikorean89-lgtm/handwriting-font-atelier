@@ -7,7 +7,7 @@ export interface CellDef {
   cell: [number, number, number, number] // x, y, w, h (mm)
   skipMark: [number, number, number] // cx, cy, r (mm)
 }
-export interface SheetDef { sheet: number; kind: 'quick' | 'standard' | 'supplement'; qr: string; cells: CellDef[] }
+export interface SheetDef { sheet: number; kind: 'quick' | 'standard' | 'kids' | 'supplement'; qr: string; cells: CellDef[] }
 export interface TemplateLayout {
   version: string
   page: [number, number]
@@ -27,10 +27,12 @@ export const PX_PER_MM = 10
 export const PAGE_W = LAYOUT.page[0] * PX_PER_MM
 export const PAGE_H = LAYOUT.page[1] * PX_PER_MM
 
-export type Tier = 'quick' | 'standard'
-export const TIERS: Record<Tier, { label: string; sheets: number[]; minutes: number; hangul: number; desc: string }> = {
-  quick: { label: '빠른 모드', sheets: [1], minutes: 7, hangul: 90, desc: '한 장, 100칸. 처음이라면 여기서 시작하세요.' },
-  standard: { label: '일반 모드', sheets: [1, 2, 3, 4], minutes: 25, hangul: 225, desc: '네 장, 영문과 기호까지. 자모 모양을 모두 직접 받아 더 닮습니다.' },
+export type Tier = 'quick' | 'standard' | 'kids' | 'letter'
+export const TIERS: Record<Tier, { label: string; sheets: number[]; minutes: number; hangul: number; desc: string; extra: string; pdf: string; preview: string; minDraw: number }> = {
+  quick: { label: '빠른 모드', sheets: [1], minutes: 7, hangul: 90, desc: '한 장, 100칸. 처음이라면 여기서 시작하세요.', extra: '숫자만', pdf: 'jaguk-template-v2.pdf', preview: 'sheet-1.png', minDraw: 30 },
+  standard: { label: '일반 모드', sheets: [1, 2, 3, 4], minutes: 25, hangul: 225, desc: '네 장, 영문과 기호까지. 자모 모양을 모두 직접 받아 더 닮습니다.', extra: '영문 52자, 기호 32자', pdf: 'jaguk-template-v2.pdf', preview: 'sheet-1.png', minDraw: 30 },
+  kids: { label: '큰 칸 모드', sheets: [11, 12], minutes: 12, hangul: 50, desc: '저학년·처음 쓰는 아이용. 칸이 크고(28mm) 아는 글자 위주예요. 1장만 써도 돼요.', extra: '숫자만 (2번 시트)', pdf: 'jaguk-template-kids-v2.pdf', preview: 'sheet-kids.png', minDraw: 15 },
+  letter: { label: '손편지 모드', sheets: [21], minutes: 10, hangul: 0, desc: '편지·공책 사진에서 글자를 골라 만들어요.', extra: '사진에 있는 것만', pdf: 'jaguk-template-v2.pdf', preview: 'sheet-1.png', minDraw: 0 },
 }
 
 // ── 보충 시트: 일반 모드 2번 시트와 같은 칸 배치(18mm, 8×10)에 고칠 글자만 담는다 ──
@@ -39,6 +41,8 @@ export const SUPP_MAX = 80
 const suppChars = new Map<number, string[]>()
 
 export function isSupplement(no: number) { return no >= SUPP_BASE }
+/** 화면에 보일 시트 이름 */
+export function sheetLabel(no: number) { return isSupplement(no) ? suppLabel(no) : no >= 11 && no <= 12 ? `큰 칸 ${no - 10}번 시트` : no === 21 ? '손편지에서 고른 글자' : `${no}번 시트` }
 export function suppLabel(no: number) { return `보충 시트 ${no - SUPP_BASE}` }
 
 export function registerSupplement(no: number, chars: string[]) { suppChars.set(no, chars.slice(0, SUPP_MAX)) }
@@ -84,7 +88,7 @@ export interface QrInfo { no: number; ver?: number; chars?: string[] }
 /** QR 문자열 → 시트 번호 (보충 시트면 글자 목록도) */
 export function parseQrInfo(text: string): QrInfo | null {
   const t = text.trim()
-  const m = /^JAGUK\|v(\d+)\|(quick|standard)\|(\d{2})\/(\d{2})$/.exec(t)
+  const m = /^JAGUK\|v(\d+)\|(quick|standard|kids)\|(\d{2})\/(\d{2})$/.exec(t)
   if (m) {
     const ver = parseInt(m[1], 10)
     return LAYOUTS[ver] ? { no: parseInt(m[3], 10), ver } : null

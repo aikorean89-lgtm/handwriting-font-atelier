@@ -33,7 +33,7 @@ with sync_playwright() as p:
     pg=ctx.new_page(); errs=[]; pg.on('pageerror', lambda e: errs.append(str(e)))
     pg.goto(BASE); pg.wait_for_timeout(2000)
     pg.get_by_role('button', name='폰트 만들기 시작').click(); pg.wait_for_timeout(300)
-    pg.get_by_role('button', name='로 하기').click(); pg.wait_for_timeout(300)
+    pg.locator('.actions .btn.primary', has_text='로 하기').click(); pg.wait_for_timeout(300)
     pg.get_by_role('button', name='다 썼어요, 찍으러 가기').click(); pg.wait_for_timeout(300)
     ok(pg.get_by_text('실시간 카메라를 쓸 수 없어요').count()==1,'preview mode detected (no live camera)')
     pg.locator('[data-testid=sheet-file]').set_input_files(f'{T}/photo-q-gaegu.jpg')

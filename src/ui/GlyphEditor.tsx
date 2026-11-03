@@ -10,7 +10,7 @@ export const EDIT_N = 180
 
 const faces = new WeakMap<BuildResult, Promise<string>>()
 let seq = 0
-function fontOf(r: BuildResult): Promise<string> {
+export function fontOf(r: BuildResult): Promise<string> {
   let p = faces.get(r)
   if (!p) {
     const fam = `FontGongbangEdit${++seq}`

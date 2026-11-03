@@ -17,11 +17,12 @@ export interface GalleryFont {
   likes: number
   liked: boolean
 }
-export interface PublishInput { name: string; author: string; ttf: Blob; preview: Blob; direct: number; tags?: string[] }
+export interface PublishInput { name: string; author: string; ttf: Blob; preview: Blob; direct: number; tags?: string[]; space?: string }
 
 export interface GalleryBackend {
   kind: 'artifact' | 'http'
-  list(): Promise<GalleryFont[]>
+  /** space: 학교 공간 코드 (없으면 전체 공개 갤러리) */
+  list(space?: string): Promise<GalleryFont[]>
   publish(p: PublishInput): Promise<GalleryFont>
   remove(id: string): Promise<void>
   /** 좋아요 켜기·끄기 → 새 좋아요 수 */
@@ -39,13 +40,23 @@ export class GalleryError extends Error {}
 const MAX_MINE = 6
 const clean = (s: string, n: number) => s.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, n)
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+/** 공간 코드 → 지문 (서버와 같은 방식) */
+export async function spaceKey(code: string): Promise<string | null> {
+  const c = code.trim().toLowerCase()
+  if (c.length < 2 || c.length > 30) return null
+  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('space:' + c))
+  return [...new Uint8Array(h)].map((x) => x.toString(16).padStart(2, '0')).join('').slice(0, 24)
+}
+const SPACE = 'fontgongbang.space'
+export function savedSpace(): string { try { return localStorage.getItem(SPACE) ?? '' } catch { return '' } }
+export function rememberSpace(code: string) { try { if (code) localStorage.setItem(SPACE, code); else localStorage.removeItem(SPACE) } catch { /* */ } }
 const cleanTags = (t: unknown): string[] => [...new Set((Array.isArray(t) ? t : []).map((x) => clean(String(x), 10)).filter(Boolean))].slice(0, 3)
 
 // ── claude.ai 미리보기 ──────────────────────────────────────────────
 // gallery/<사용자 id> 문서 하나에 그 사람이 올린 글씨체 목록을 둔다.
 // 규칙: gallery 는 누구나 읽고 주인만 고치며, gallery/{self} 는 본인이 쓴다.
 // 좋아요는 likes/<사용자 id> 문서에 그 사람이 누른 글씨체 id 목록으로 둔다 (likes/{self} 는 본인이 쓴다).
-interface StoredFont { id: string; name: string; author: string; createdAt: number; ttf: string; preview: string; direct: number; sizeKB: number; tags?: string[] }
+interface StoredFont { id: string; name: string; author: string; createdAt: number; ttf: string; preview: string; direct: number; sizeKB: number; tags?: string[]; space?: string /* 공간 코드의 지문 */ }
 
 class ArtifactBackend implements GalleryBackend {
   kind = 'artifact' as const
@@ -56,9 +67,10 @@ class ArtifactBackend implements GalleryBackend {
       db, user, assets, uid: user ? await user.id().catch(() => null) : null,
     }))
   }
-  async list() {
+  async list(space?: string) {
     const { db, uid } = await this.ready
     if (!db) throw new GalleryError('로그인한 사람만 갤러리를 볼 수 있어요.')
+    const sk = space ? await spaceKey(space) : null
     const snap = await db.collection('gallery').limit(500).get()
     const likes = new Map<string, number>()
     let mineLiked = new Set<string>()
@@ -75,6 +87,7 @@ class ArtifactBackend implements GalleryBackend {
       const fonts = (d.data()?.fonts ?? []) as StoredFont[]
       for (const f of fonts) {
         if (!f?.ttf || !f.id) continue
+        if ((f.space ?? null) !== sk) continue
         out.push({
           id: `${d.id}/${f.id}`, name: String(f.name ?? ''), author: String(f.author ?? ''), createdAt: Number(f.createdAt) || 0,
           ttfUrl: `/_blob/${f.ttf}`, previewUrl: f.preview ? `/_blob/${f.preview}` : '', direct: Number(f.direct) || 0,
@@ -103,6 +116,7 @@ class ArtifactBackend implements GalleryBackend {
     const f: StoredFont = {
       id: newId(), name: clean(p.name, 24), author: clean(p.author, 20), createdAt: Date.now(),
       ttf: ttf.id, preview: preview.id, direct: p.direct, sizeKB: Math.round(p.ttf.size / 1024), tags: cleanTags(p.tags),
+      ...(p.space ? { space: (await spaceKey(p.space)) ?? undefined } : {}),
     }
     // 같은 이름은 새 것으로 바꾸고, 한 사람당 최근 몇 개만 둔다
     const rest = cur.filter((x) => x.name !== f.name)
@@ -171,8 +185,8 @@ function voter(): string {
 class HttpBackend implements GalleryBackend {
   kind = 'http' as const
   private base = `${import.meta.env.BASE_URL}api/fonts`.replace('./', '/')
-  async list() {
-    const r = await fetch(this.base, { headers: { accept: 'application/json', 'x-voter': voter() }, cache: 'no-store' }).catch(() => null)
+  async list(space?: string) {
+    const r = await fetch(space ? `${this.base}?space=${encodeURIComponent(space)}` : this.base, { headers: { accept: 'application/json', 'x-voter': voter() }, cache: 'no-store' }).catch(() => null)
     if (!r || !r.ok) throw new GalleryError(r?.status === 503 ? '갤러리 저장소가 아직 연결되지 않았어요.' : '갤러리를 불러오지 못했어요.')
     const body = await r.json().catch(() => null)
     if (!body || !Array.isArray(body.fonts)) throw new GalleryError('갤러리를 불러오지 못했어요.')
@@ -183,6 +197,7 @@ class HttpBackend implements GalleryBackend {
     const fd = new FormData()
     fd.set('name', clean(p.name, 24)); fd.set('author', clean(p.author, 20)); fd.set('direct', String(p.direct))
     fd.set('ttf', p.ttf, 'font.ttf'); fd.set('preview', p.preview, 'preview.png'); fd.set('tags', cleanTags(p.tags).join(','))
+    if (p.space) fd.set('space', p.space)
     const r = await fetch(this.base, { method: 'POST', body: fd }).catch(() => null)
     if (!r) throw new GalleryError('인터넷 연결을 확인해 주세요.')
     const body = await r.json().catch(() => ({}))

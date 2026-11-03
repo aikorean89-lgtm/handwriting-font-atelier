@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Head } from '../ui/common'
 import { DrawPad, type DrawPadHandle } from '../ui/DrawPad'
 import type { Bitmap } from '../engine/bitmap'
-import { PX_PER_MM, TEMPLATE_VERSION, TIERS, sheetDef } from '../engine/template'
+import { PX_PER_MM, TEMPLATE_VERSION, TIERS, sheetDef, sheetLabel } from '../engine/template'
 import { isHangul } from '../engine/hangul'
 import { ensureRefFont } from '../engine/refmask'
 import { segmentScored } from '../engine/segment'
@@ -110,10 +110,12 @@ export function DrawScreen({ project, onSheet, onNext, onBack }: { project: Proj
     onNext()
   }
 
-  const firstSheetDone = items.filter((i) => i.no === 1 && drawn.has(i.index)).length
+  const first = TIERS[project.tier].sheets[0]
+  const firstSheetDone = items.filter((i) => i.no === first && drawn.has(i.index)).length
   const total = drawn.size
   if (!cur) return null
-  const canFinish = firstSheetDone >= 30
+  const need = TIERS[project.tier].minDraw
+  const canFinish = firstSheetDone >= need
 
   return (
     <main className="wrap screen draw">
@@ -128,7 +130,7 @@ export function DrawScreen({ project, onSheet, onNext, onBack }: { project: Proj
 
       <div className="draw-stage">
         <div className="draw-target">
-          <span className="note">{at + 1}번째 칸 · {cur.no}번 시트</span>
+          <span className="note">{at + 1}번째 칸 · {sheetLabel(cur.no)}</span>
           <b className="draw-char" aria-live="polite">{cur.char}</b>
           {drawn.has(cur.index) && <span className="tag"><span className="dot ok" />썼어요 · 고쳐 쓸 수 있어요</span>}
         </div>
@@ -154,7 +156,7 @@ export function DrawScreen({ project, onSheet, onNext, onBack }: { project: Proj
         <button className="btn primary" disabled={!canFinish || busy || !ready} onClick={finish}>{busy ? '정리하는 중…' : `쓴 ${total}자로 다듬기`}</button>
         <button className="btn quiet" onClick={() => { saveCurrent(); onBack() }}>종이에 쓰기로</button>
       </div>
-      {!canFinish && <p className="note">1번 시트 글자를 30자 이상 쓰면 다음 단계로 갈 수 있어요. 많이 쓸수록 더 닮아요. 쓰다가 나가도 저장돼요.</p>}
+      {!canFinish && <p className="note">첫 시트 글자를 {need}자 이상 쓰면 다음 단계로 갈 수 있어요. 많이 쓸수록 더 닮아요. 쓰다가 나가도 저장돼요.</p>}
     </main>
   )
 }

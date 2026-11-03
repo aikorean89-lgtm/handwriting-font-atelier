@@ -8,7 +8,7 @@ import { isHangul } from './engine/hangul'
 import { ensureRefFont } from './engine/refmask'
 import { SEG_VERSION, segmentScored } from './engine/segment'
 
-export type Step = 'home' | 'tier' | 'template' | 'capture' | 'draw' | 'review' | 'jamo' | 'build' | 'play' | 'export' | 'gallery'
+export type Step = 'home' | 'tier' | 'template' | 'capture' | 'draw' | 'letter' | 'review' | 'jamo' | 'build' | 'play' | 'export' | 'gallery' | 'growth'
 
 export interface Cell {
   index: number

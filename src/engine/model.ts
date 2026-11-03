@@ -8,7 +8,9 @@ import { LABEL } from './segment'
 import { REF, refMasks } from './refmask'
 import { type Desc, chamfer, describe, median } from './consensus'
 
-export interface SourceCell { index: number; char: string; bitmap: Bitmap; labels: Uint8Array; segCost?: number; edited?: boolean }
+export interface SourceCell { index: number; char: string; bitmap: Bitmap; labels: Uint8Array; segCost?: number; edited?: boolean; src?: 'A' | 'B' }
+/** 두 글씨 섞기: 이 칸의 이 자모를 부품으로 쓸지 */
+export type KeepFn = (c: SourceCell, slot: Slot) => boolean
 
 export interface Sample {
   key: string
@@ -69,12 +71,13 @@ export class Library {
   private stats = new Map<string, { x: number; y: number; w: number; h: number; n: number }>()
   private refCache = new Map<string, Sample>()
 
-  constructor(cells: SourceCell[]) {
+  constructor(cells: SourceCell[], keep?: KeepFn) {
     for (const c of cells) {
       if (!isHangul(c.char)) continue
       const syl = decompose(c.char)
       for (const slot of ['cho', 'jung', 'jong'] as Slot[]) {
         if (slot === 'jong' && syl.jong === 0) continue
+        if (keep && !keep(c, slot)) continue
         const want = LABEL[slot]
         const b = inkBox(c.bitmap, c.labels, want)
         if (!b || b.w * b.h < 6) continue

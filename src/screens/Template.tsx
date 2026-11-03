@@ -7,11 +7,11 @@ export function TemplateScreen({ tier, onNext, onDraw }: { tier: Tier; onNext: (
   return (
     <main className="wrap screen">
       <Head n="02" title="템플릿을 인쇄해 쓰세요">
-        {tier === 'quick' ? 'PDF의 1쪽만 인쇄하면 됩니다.' : 'PDF 1–4쪽을 모두 인쇄하세요.'} 인쇄 설정에서 반드시 실제 크기(100%)를 고르세요. 페이지에 맞춤을 쓰면 칸이 작아져 인식이 흔들립니다.
+        {tier === 'quick' ? 'PDF의 1쪽만 인쇄하면 됩니다.' : tier === 'kids' ? '큰 칸 PDF 2쪽을 인쇄하세요(1쪽만 써도 돼요).' : 'PDF 1–4쪽을 모두 인쇄하세요.'} 인쇄 설정에서 반드시 실제 크기(100%)를 고르세요. 페이지에 맞춤을 쓰면 칸이 작아져 인식이 흔들립니다.
       </Head>
       <div className="tpl">
         <div className="tpl-sheet">
-          <img src={`${import.meta.env.BASE_URL}template/sheet-1.png`} alt="빠른 모드 시트 미리보기: 네 모서리에 검은 마커, 하늘색 칸 100개" />
+          <img src={`${import.meta.env.BASE_URL}template/${t.preview}`} alt={`${t.label} 시트 미리보기: 네 모서리에 검은 마커, 하늘색 칸`} />
         </div>
         <div>
           <ol className="tips">
@@ -23,7 +23,7 @@ export function TemplateScreen({ tier, onNext, onDraw }: { tier: Tier; onNext: (
             <li><div><b>겹받침 글자도 모양만</b><span>일반 모드 시트의 넋, 핥 같은 글자는 겹받침 모양을 얻기 위한 글자예요.</span></div></li>
           </ol>
           <div className="actions">
-            <TemplateButton label="템플릿 PDF 받기" />
+            <TemplateButton label="템플릿 PDF 받기" file={t.pdf} name={tier === 'kids' ? '폰트공방-큰칸-템플릿.pdf' : undefined} />
             <button className="btn primary" onClick={onNext}>다 썼어요, 찍으러 가기</button>
           </div>
           <div className="draw-cta">

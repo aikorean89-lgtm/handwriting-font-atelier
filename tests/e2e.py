@@ -16,7 +16,7 @@ with sync_playwright() as p:
     pg.get_by_role('button', name='폰트 만들기 시작').click(); pg.wait_for_timeout(400)
     if tier=='standard': pg.get_by_role('button', name='일반 모드').first.click()
     shot(pg,'01-tier')
-    pg.get_by_role('button', name='로 하기').click(); pg.wait_for_timeout(300); shot(pg,'02-template')
+    pg.locator('.actions .btn.primary', has_text='로 하기').click(); pg.wait_for_timeout(300); shot(pg,'02-template')
     pg.get_by_role('button', name='다 썼어요, 찍으러 가기').click(); pg.wait_for_timeout(300)
     t0=time.time()
     for i,ph in enumerate(photos):

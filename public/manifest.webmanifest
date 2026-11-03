@@ -1,0 +1,16 @@
+{
+  "name": "폰트공방 — 손글씨로 만드는 나만의 한글 폰트",
+  "short_name": "폰트공방",
+  "description": "종이나 화면에 쓴 손글씨로 11,172자 한글 폰트를 만들어요. 인터넷이 없어도 쓸 수 있어요.",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fbfbf8",
+  "theme_color": "#fbfbf8",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

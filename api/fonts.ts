@@ -1,5 +1,5 @@
 // 폰트공방 글씨체 갤러리 API (Vercel Function, Vercel Blob 저장소)
-//   GET    /api/fonts                 공개된 글씨체 목록
+//   GET    /api/fonts[?space=코드]     공개된 글씨체 목록 (공간 코드를 주면 그 공간의 글씨체만)
 //   POST   /api/fonts                 multipart: name, author, direct, ttf, preview → { font, key }
 //   DELETE /api/fonts?id=…&key=…      올린 브라우저의 열쇠 또는 x-admin-token(GALLERY_ADMIN_TOKEN)
 //   PATCH  /api/fonts?id=…&key=…      { tags } 태그 고치기 (올린 브라우저의 열쇠 또는 관리자)
@@ -8,7 +8,7 @@
 import { del, list, put } from '@vercel/blob'
 
 export interface PublicFont { id: string; name: string; author: string; createdAt: number; ttfUrl: string; previewUrl: string; direct: number; sizeKB: number; tags?: string[]; likes?: number; liked?: boolean }
-interface Meta extends PublicFont { keyHash: string }
+interface Meta extends PublicFont { keyHash: string; spaceHash?: string }
 
 export interface Store {
   put(path: string, body: Blob | string, contentType: string, overwrite?: boolean): Promise<{ url: string }>
@@ -38,8 +38,14 @@ const voterOf = async (req: Request) => {
 }
 
 function strip(m: Meta): PublicFont {
-  const { keyHash: _k, ...pub } = m
+  const { keyHash: _k, spaceHash: _s, ...pub } = m
   return pub
+}
+/** 공간 코드 → 저장용 지문 (코드 자체는 저장하지 않는다) */
+export async function spaceKey(code: unknown): Promise<string | null> {
+  const c = String(code ?? '').trim().toLowerCase()
+  if (c.length < 2 || c.length > 30) return null
+  return (await sha('space:' + c)).slice(0, 24)
 }
 
 async function readMeta(store: Store, id: string): Promise<{ meta: Meta; url: string } | null> {
@@ -64,9 +70,15 @@ export async function handle(req: Request, store: Store | null, env: { GALLERY_A
       likes.set(fid, (likes.get(fid) ?? 0) + 1)
       if (voter && who === `${voter}.txt`) mine.add(fid)
     }
+    const space = url.searchParams.has('space') ? await spaceKey(url.searchParams.get('space')) : null
+    if (url.searchParams.has('space') && !space) return json({ error: '공간 코드는 2–30자예요.' }, 400)
     const fonts = (await Promise.all(metas.map(async (m) => {
       const t = await store.read(m.url)
-      try { return t ? strip(JSON.parse(t) as Meta) : null } catch { return null }
+      try {
+        const meta = t ? JSON.parse(t) as Meta : null
+        if (!meta || (meta.spaceHash ?? null) !== space) return null
+        return strip(meta)
+      } catch { return null }
     }))).filter((x): x is PublicFont => !!x)
       .map((f) => ({ ...f, tags: f.tags ?? [], likes: likes.get(f.id) ?? 0, liked: mine.has(f.id) }))
       .sort((a, b) => b.createdAt - a.createdAt)
@@ -113,6 +125,7 @@ export async function handle(req: Request, store: Store | null, env: { GALLERY_A
       id, name, author: clean(fd.get('author'), 20), createdAt: Date.now(), ttfUrl: t.url, previewUrl: p.url,
       direct: Math.max(0, Math.min(11172, Number(fd.get('direct')) || 0)), sizeKB: Math.round(ttf.size / 1024), keyHash: await sha(key),
       tags: cleanTags(fd.get('tags')),
+      ...(fd.get('space') ? { spaceHash: (await spaceKey(fd.get('space'))) ?? undefined } : {}),
     }
     await store.put(`gallery/meta/${id}.json`, JSON.stringify(meta), 'application/json')
     return json({ font: strip(meta), key }, 201)

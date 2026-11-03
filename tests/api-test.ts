@@ -41,6 +41,19 @@ ok(l.fonts.length === 2 && l.fonts[0].name === '둘째 글씨', 'newest first')
   ok((await handle(new Request(`${base}?id=${t.font.id}&key=${t.key}`, { method: 'DELETE' }), store)).status === 200, 'delete tagged')
   ok(![...store.files.keys()].some((k) => k.includes(t.font.id)), 'likes removed with font')
 }
+// 학교 공간
+{
+  const fd = new FormData(); fd.set('name', '공간 글씨'); fd.set('space', ' 남성현초 '); fd.set('ttf', ttf, 'a.ttf'); fd.set('preview', png, 'p.png')
+  const t = await (await handle(new Request(base, { method: 'POST', body: fd }), store)).json()
+  const pub = await (await handle(new Request(base), store)).json()
+  ok(!pub.fonts.some((f: { id: string }) => f.id === t.font.id), 'space font hidden from public list')
+  const sp = await (await handle(new Request(`${base}?space=${encodeURIComponent('남성현초')}`), store)).json()
+  ok(sp.fonts.length === 1 && sp.fonts[0].id === t.font.id && !('spaceHash' in sp.fonts[0]), 'space list shows only space fonts, hash hidden')
+  const other = await (await handle(new Request(`${base}?space=다른학교`), store)).json()
+  ok(other.fonts.length === 0, 'other space empty')
+  ok((await handle(new Request(`${base}?space=x`), store)).status === 400, 'too short space 400')
+  await handle(new Request(`${base}?id=${t.font.id}&key=${t.key}`, { method: 'DELETE' }), store)
+}
 r = await handle(new Request(`${base}?id=${a.font.id}&key=wrong`, { method: 'DELETE' }), store, { GALLERY_ADMIN_TOKEN: 'adm' }); ok(r.status === 403, 'wrong key 403')
 r = await handle(new Request(`${base}?id=${a.font.id}&key=${a.key}`, { method: 'DELETE' }), store, { GALLERY_ADMIN_TOKEN: 'adm' }); ok(r.status === 200, 'owner key deletes')
 ok(![...store.files.keys()].some((k) => k.includes(a.font.id)), 'all three blobs removed')

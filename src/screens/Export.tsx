@@ -2,15 +2,16 @@ import { useRef, useState } from 'react'
 import { Head } from '../ui/common'
 import { writeFont, type BuildResult } from '../engine/build'
 import { SaveDeclined, saveFile } from '../platform'
-import { type GalleryFont, gallery } from '../gallery/backend'
+import { type GalleryFont, gallery, rememberSpace, savedSpace } from '../gallery/backend'
 import { makePreview } from '../gallery/preview'
 import { TagPicker } from './Gallery'
 import { InstallGuide } from '../ui/InstallGuide'
+import { addRecord } from '../history'
 
 type Pub = { k: 'idle' } | { k: 'busy' } | { k: 'done'; font: GalleryFont } | { k: 'error'; msg: string } | { k: 'removed' }
 
-export function ExportScreen({ result, name, onName, onGallery }: {
-  result: BuildResult; name: string; onName: (n: string) => void; onGallery: () => void
+export function ExportScreen({ result, name, onName, onGallery, onGrowth }: {
+  result: BuildResult; name: string; onName: (n: string) => void; onGallery: () => void; onGrowth: () => void
 }) {
   const [share, setShare] = useState(true)
   const [author, setAuthor] = useState(() => { try { return localStorage.getItem('fontgongbang.author') ?? '' } catch { return '' } })
@@ -20,6 +21,9 @@ export function ExportScreen({ result, name, onName, onGallery }: {
   const [saveMsg, setSaveMsg] = useState<string | null>(null)
   const [pressing, setPressing] = useState(false)
   const [tags, setTags] = useState<string[]>([])
+  const [where, setWhere] = useState<'all' | 'space'>(() => (savedSpace() ? 'space' : 'all'))
+  const [space, setSpace] = useState(() => savedSpace())
+  const [rec, setRec] = useState<'idle' | 'busy' | 'done' | 'error'>('idle')
   const timer = useRef(0)
   const family = draft.trim() || '내 손글씨'
 
@@ -37,7 +41,9 @@ export function ExportScreen({ result, name, onName, onGallery }: {
     try { localStorage.setItem('fontgongbang.author', author.trim()) } catch { /* */ }
     try {
       const preview = await makePreview(ttf)
-      const font = await gallery().publish({ name: family, author: author.trim(), ttf: blob, preview, direct: result.directHangul, tags })
+      const sp = where === 'space' && space.trim().length >= 2 ? space.trim() : undefined
+      if (sp) rememberSpace(sp)
+      const font = await gallery().publish({ name: family, author: author.trim(), ttf: blob, preview, direct: result.directHangul, tags, space: sp })
       setPub({ k: 'done', font })
     } catch (e) { setPub({ k: 'error', msg: (e as Error).message || '갤러리에 올리지 못했어요.' }) }
   }
@@ -93,6 +99,16 @@ export function ExportScreen({ result, name, onName, onGallery }: {
         <div className="tag-field">
           <span className="note">내 글씨를 설명하는 태그 (3개까지, 갤러리에서 찾을 때 쓰여요)</span>
           <TagPicker value={tags} onChange={setTags} />
+          <div className="seg" role="group" aria-label="공개 범위">
+            <button aria-pressed={where === 'all'} onClick={() => setWhere('all')}>모두에게 공개</button>
+            <button aria-pressed={where === 'space'} onClick={() => setWhere('space')}>🏫 우리 학교 공간에만</button>
+          </div>
+          {where === 'space' && (
+            <label className="space-field">
+              <span className="note">공간 코드 (선생님이 정해 준 코드, 2–30자). 같은 코드를 넣은 사람만 갤러리에서 볼 수 있어요.</span>
+              <input value={space} maxLength={30} placeholder="예: 남성현초2026" onChange={(e) => setSpace(e.target.value)} />
+            </label>
+          )}
         </div>
       )}
 
@@ -112,13 +128,22 @@ export function ExportScreen({ result, name, onName, onGallery }: {
             setSaveMsg(null)
             try { await saveFile(sealed.file, sealed.blob); setSaveMsg('내려받았어요. 아래 설치 방법을 따라 설치하세요.') } catch (e) { setSaveMsg(e instanceof SaveDeclined ? null : (e as Error).message) }
           }}>{sealed.file} 내려받기</button>
+          <button className="btn quiet" disabled={rec === 'busy' || rec === 'done'} onClick={async () => {
+            setRec('busy')
+            try {
+              await addRecord({ name: sealed.family, label: sealed.family, direct: result.directHangul, ttf: new Uint8Array(await sealed.blob.arrayBuffer()) })
+              setRec('done')
+            } catch { setRec('error') }
+          }}>{rec === 'done' ? '성장 기록에 저장됨' : '성장 기록에 저장'}</button>
+          {rec === 'done' && <button className="linkish" style={{ alignSelf: 'center' }} onClick={onGrowth}>기록 보기 →</button>}
+          {rec === 'error' && <span className="note" role="alert" style={{ alignSelf: 'center' }}>기록을 저장하지 못했어요.</span>}
           {saveMsg && <span className="note" role="status" style={{ alignSelf: 'center' }}>{saveMsg}</span>}
         </div>
       )}
       {sealed && pub.k !== 'idle' && (
         <div className={`pub pub-${pub.k}`} role="status" aria-live="polite">
           {pub.k === 'busy' && <span>갤러리에 올리는 중…</span>}
-          {pub.k === 'done' && <><span><b>갤러리에 올렸어요.</b> 이제 다른 사람도 “{pub.font.name}” 글씨체를 볼 수 있어요.</span><button className="btn small" onClick={onGallery}>갤러리 보기</button><button className="btn small quiet" onClick={unpublish}>갤러리에서 내리기</button></>}
+          {pub.k === 'done' && <><span><b>갤러리에 올렸어요.</b> {where === 'space' && space.trim().length >= 2 ? `‘${space.trim()}’ 공간에서 “${pub.font.name}” 글씨체를 볼 수 있어요.` : `이제 다른 사람도 “${pub.font.name}” 글씨체를 볼 수 있어요.`}</span><button className="btn small" onClick={onGallery}>갤러리 보기</button><button className="btn small quiet" onClick={unpublish}>갤러리에서 내리기</button></>}
           {pub.k === 'removed' && <><span>갤러리에서 내렸어요. 내 컴퓨터에 받은 파일은 그대로예요.</span><button className="btn small quiet" onClick={() => publish(writeFont(result.glyphs, sealed.family), sealed.blob)}>다시 올리기</button></>}
           {pub.k === 'error' && <><span>{pub.msg}</span><button className="btn small quiet" onClick={() => publish(writeFont(result.glyphs, sealed.family), sealed.blob)}>다시 시도</button></>}
         </div>

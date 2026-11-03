@@ -3,7 +3,7 @@ import { Head } from '../ui/common'
 import { Viewfinder } from './Viewfinder'
 import { CornerEditor } from './CornerEditor'
 import { fileToCanvas, processSheet, type Pt } from '../engine/sheet'
-import { LAYOUT, TEMPLATE_VERSION, TIERS, isSupplement, sheetDef, suppLabel, type Tier } from '../engine/template'
+import { LAYOUT, TEMPLATE_VERSION, TIERS, isSupplement, sheetDef, sheetLabel, suppLabel, type Tier } from '../engine/template'
 import { loadCV } from '../engine/cv'
 import { isHangul } from '../engine/hangul'
 import { ensureRefFont } from '../engine/refmask'
@@ -12,7 +12,7 @@ import { type Cell, type Project, type Sheet, suppNos } from '../state'
 import { canUseLiveCamera } from '../platform'
 import { EngineStatus } from '../ui/EngineStatus'
 
-const sheetName = (n: number) => (isSupplement(n) ? suppLabel(n) : `${n}번 시트`)
+const sheetName = (n: number) => sheetLabel(n)
 /** 이름 끝 글자에 맞는 을/를 (숫자로 끝나면 읽는 소리로) */
 const eul = (name: string) => {
   const last = name.at(-1) ?? ''
@@ -32,6 +32,7 @@ export function CaptureScreen({ project, onSheet, onNext, onDraw }: { project: P
   const tier: Tier = project.tier
   const supps = suppNos(project)
   const slots = [...TIERS[tier].sheets, ...supps]
+  const first = TIERS[tier].sheets[0]
   const [mode, setMode] = useState<Mode>({ k: 'idle' })
   const [err, setErr] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
@@ -60,7 +61,7 @@ export function CaptureScreen({ project, onSheet, onNext, onDraw }: { project: P
       })
       onSheet({ no: res.sheetNo, ver: res.ver, preview: res.preview, sharpness: res.sharpness, capturedAt: Date.now(), cells })
       if (res.suppChars) setInfo(`${eul(suppLabel(res.sheetNo))} 읽었어요. 여기 쓴 ${res.suppChars.length}자는 폰트를 다시 만들 때 이 글씨로 바뀌어요.`)
-      else if (slot > 0 && res.sheetNo !== slot) setInfo(`QR을 읽어 보니 ${res.sheetNo}번 시트예요. ${res.sheetNo}번 자리에 넣었어요.`)
+      else if (slot > 0 && res.sheetNo !== slot) setInfo(`QR을 읽어 보니 ${sheetName(res.sheetNo)}예요. 그 자리에 넣었어요.`)
       if (res.markersFound.length === 3) setInfo('마커 3개로 폈어요. 결과가 어긋나 보이면 다시 찍어 주세요.')
       setFocus(res.sheetNo)
       setMode({ k: 'idle' })
@@ -124,7 +125,7 @@ export function CaptureScreen({ project, onSheet, onNext, onDraw }: { project: P
               <button className="slot-thumb" style={{ cursor: s ? 'pointer' : 'default' }} onClick={() => s && setFocus(n)} aria-label={s ? `${sheetName(n)} 결과 보기` : `${sheetName(n)} 아직 없음`}>
                 {s ? <img src={s.preview} alt="" /> : <span aria-hidden>{isSupplement(n) ? `S${n - 100}` : n}</span>}
               </button>
-              <h3>{sheetName(n)} {n === 1 ? '(빠른 모드)' : isSupplement(n) ? `(${sheetDef(n)?.cells.length ?? 0}자)` : '(일반 모드 추가)'}</h3>
+              <h3>{sheetName(n)} {n === 1 ? '(빠른 모드)' : n >= 11 && n <= 12 ? '' : isSupplement(n) ? `(${sheetDef(n)?.cells.length ?? 0}자)` : '(일반 모드 추가)'}</h3>
               <span className="tag">
                 <span className={`dot ${s ? (warn ? 'warn' : 'ok') : 'off'}`} />
                 {s ? (s.drawn ? `화면에 쓴 글자 ${s.cells.filter((c) => c.state === 'ok').length}자` : warn ? `확인할 칸 ${warn}개` : '모든 칸 읽음') : '아직 안 찍음'}
@@ -137,7 +138,7 @@ export function CaptureScreen({ project, onSheet, onNext, onDraw }: { project: P
           )
         })}
       </div>
-      {project.sheets[1] && (
+      {project.sheets[first] && (
         <p className="note supp-row">
           보충 시트를 찍었나요? 위 칸에 없어도 QR로 알아봐요.{' '}
           <button className="btn small quiet" onClick={() => { pendingSlot.current = 0; fileRef.current?.click() }} disabled={mode.k === 'processing'}>보충 시트 올리기</button>
@@ -148,8 +149,8 @@ export function CaptureScreen({ project, onSheet, onNext, onDraw }: { project: P
       {focused && <SheetCheck sheet={focused} />}
 
       <div className="actions sticky">
-        <button className="btn primary" disabled={!project.sheets[1]} onClick={onNext}>
-          {captured.length < slots.length && project.sheets[1] ? `찍은 ${captured.length}장으로 다듬기` : '다듬으러 가기'}
+        <button className="btn primary" disabled={!project.sheets[first]} onClick={onNext}>
+          {captured.length < slots.length && project.sheets[first] ? `찍은 ${captured.length}장으로 다듬기` : '다듬으러 가기'}
         </button>
       </div>
 

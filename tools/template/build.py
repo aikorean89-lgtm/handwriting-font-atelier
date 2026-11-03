@@ -71,9 +71,11 @@ def page(kind,idx,total,title,sub,items,cols,cell,gx,label,gy,y0,instr,start=1,f
         o.append(f'<rect x="141" y="{fy+3.6}" width="4" height="4" fill="none" stroke="{BLUE}" stroke-width="0.3"/>')
         o.append(t(147,fy+5.6,'하늘색 선은 촬영 후 자동으로 지워져요',2.2,KR,GRAY))
         o.append(t(147,fy+8.6,'네 모서리 검은 마커가 다 보이게 찍으세요',2.2,KR,GRAY))
-        o.append(t(16,fy+13.4,'일반 모드로 만들려면 2–4번 시트도 함께 쓰세요. 이 시트는 그대로 1번 시트로 쓰입니다.',2.2,KR,GRAY))
+        o.append(t(16,fy+13.4,'이 한 장만 써도 폰트가 만들어져요. 2번 시트까지 쓰면 글자 모양과 숫자가 더해져요.' if kind=='kids' else '일반 모드로 만들려면 2–4번 시트도 함께 쓰세요. 이 시트는 그대로 1번 시트로 쓰입니다.',2.2,KR,GRAY))
     svg=f'<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 210 297">{"".join(o)}</svg>'
     return svg,{'sheet':idx,'kind':kind,'qr':code,'cells':layout}
+KIDS=list('가나다라마바사아자차카타파하이야개얘너네여계과왜회요원웨귀유크의또빵씨짝밖눈물봄밥옷있받낮꽃엌밭앞좋')
+assert len(KIDS)==50 and len(set(KIDS))==50, len(KIDS)
 INSTR_Q='① 칸 위 글자를 평소 크기·속도로 따라 쓰세요   ② 하늘색 십자 가운데, 칸 밖으로 나가지 않게   ③ 초성·중성·종성 획은 살짝 띄우기   ④ 틀린 칸은 ○를 칠하기'
 INSTR_S='같은 펜으로 쓰세요 · 낯선 글자도 모양만 따라 쓰면 됩니다 · 틀린 칸은 ○를 칠하고, 여분 칸 위 빈칸에 그 글자를 적어 다시 쓰세요'
 pages=[]; layouts=[]
@@ -82,8 +84,17 @@ pages.append(s); layouts.append(l)
 for p in range(3):
     s,l=page('standard',p+2,4,f'일반 모드 추가 시트 {p+1}/3 — 1번 시트와 함께 촬영하세요',f'SHEET {p+2:02d}/04 · STANDARD · 80 CELLS · 18MM · TEMPLATE v{V}.0',STD[p*80:(p+1)*80],8,18,3,4.6,1.4,38,INSTR_S,101+p*80)
     pages.append(s); layouts.append(l)
+INSTR_K='① 칸 위 글자를 보고 크게 따라 쓰세요   ② 하늘색 십자 가운데에   ③ 칸 밖으로 나가지 않게   ④ 틀리면 ○를 칠하기'
+kids_pages=[]
+if V>=2:
+    KCELLS=KIDS[:30]+[None]*0, KIDS[30:]+list('0123456789')
+    for k,items in enumerate(KCELLS):
+        s,l=page('kids',11+k,12,f'큰 칸 모드 시트 {k+1}/2 — 크게 천천히 따라 쓰세요',f'SHEET {11+k:02d}/12 · KIDS · {len(items)} CELLS · 28MM · TEMPLATE v{V}.0',items,5,28,4,6,3,38,INSTR_K,501+k*30,k==0)
+        kids_pages.append(s); layouts.append(l)
 meta={'version':f'{V}.0','units':'mm','page':[210,297],'aruco':{'dictionary':'DICT_4X4_50','size':MK,'markers':{str(k):{'origin':v,'position':['TL','TR','BR','BL'][k]} for k,v in MARKERS.items()}},'dropoutColor':BLUE,'sheets':layouts}
 json.dump(meta,open(f'jaguk-template-layout-v{V}.json','w'),ensure_ascii=False,indent=1)
 doc='<html><head><meta charset="utf-8"><style>@page{size:210mm 297mm;margin:0}body{margin:0}.pg{width:210mm;height:297mm;page-break-after:always;overflow:hidden}.pg:last-child{page-break-after:auto}svg{display:block}</style></head><body>'+''.join(f'<div class="pg">{s}</div>' for s in pages)+'</body></html>'
 open('template.html','w').write(doc)
+if kids_pages:
+    open('template-kids.html','w').write(doc.split('<body>')[0]+'<body>'+''.join(f'<div class="pg">{s}</div>' for s in kids_pages)+'</body></html>')
 print('ok')

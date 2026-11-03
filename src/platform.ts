@@ -31,8 +31,8 @@ export async function saveFile(filename: string, data: Blob): Promise<void> {
   setTimeout(() => URL.revokeObjectURL(url), 5000)
 }
 
-export async function saveTemplatePdf(): Promise<void> {
-  const res = await fetch(`${import.meta.env.BASE_URL}template/jaguk-template-v2.pdf`)
+export async function saveTemplatePdf(file = 'jaguk-template-v2.pdf', name = '폰트공방-손글씨-템플릿.pdf'): Promise<void> {
+  const res = await fetch(`${import.meta.env.BASE_URL}template/${file}`)
   if (!res.ok) throw new Error('템플릿을 불러오지 못했어요. 다시 시도해 주세요.')
-  await saveFile('폰트공방-손글씨-템플릿.pdf', await res.blob())
+  await saveFile(name, await res.blob())
 }

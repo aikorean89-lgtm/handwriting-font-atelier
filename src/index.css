@@ -640,3 +640,37 @@ button, input, textarea, select { font: inherit; color: inherit; }
   .brand-text { flex-direction: column; align-items: flex-start; gap: 0; line-height: 1.15; }
   .brand-credit { font-size: 10.5px; }
 }
+/* v1.5.2 첫 화면: 문장마다 한 줄, 탭 줄은 히어로 아래 전체 폭, 초·중·종성 표시는 글자 아래 가운데 */
+.hero-copy p.hero-lede { max-width: none; }
+.hero-lede span { display: block; }
+@media (min-width: 861px) {
+  .hero-lede { font-size: min(18px, calc((min(100vw, var(--maxw)) - 2 * var(--gutter) - 32px) * 0.5238 / 23.2)) !important; }
+  .hero-lede span { white-space: nowrap; }
+}
+@media (max-width: 860px) {
+  /* 휴대폰: 문장마다 한 줄에 들어가도록 글자 크기를 화면 폭에 맞춘다 (가장 긴 문장 ≈ 22.7em) */
+  .hero-lede { font-size: min(18px, calc((100vw - 2 * var(--gutter)) / 23.2)) !important; }
+  .hero-lede span { white-space: nowrap; }
+}
+.hero { min-height: calc(100svh - 56px - 130px); padding-bottom: 28px; }
+.hub { max-width: none !important; margin: 0 0 36px; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.hub:has(> :nth-child(2):last-child) { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: none; }
+.hub-tab { min-height: 76px; padding: 14px 20px; gap: 16px; }
+.hub-tab svg { width: 26px; height: 26px; }
+.hub-tab b { font-size: 17px; }
+.hub-tab small { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.install-help { margin: -24px 0 36px; max-width: none; }
+.hero-legend {
+  left: 50%; right: auto; bottom: 3%; transform: translateX(-50%);
+  gap: 22px; font-size: 17px; font-weight: 600; color: var(--text); white-space: nowrap;
+  padding: 10px 20px; border: 1px solid var(--line-strong); background: var(--surface);
+}
+.hero-legend i { width: 20px; height: 6px; margin-right: 8px; vertical-align: 4px; }
+@media (max-width: 640px) {
+  .hub { gap: 8px; margin-bottom: 24px; }
+  .hub-tab { min-height: 84px; padding: 10px 6px; gap: 6px; }
+  .hub-tab svg { width: 22px; height: 22px; }
+  .hub-tab b { font-size: 14px; }
+  .hero-legend { font-size: 14px; gap: 14px; padding: 7px 12px; }
+  .hero-legend i { width: 14px; height: 5px; margin-right: 5px; }
+}

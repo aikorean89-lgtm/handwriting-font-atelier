@@ -24,7 +24,7 @@ with sync_playwright() as p:
     pg.get_by_text('예전에 받은 시트예요').click()
     pg.locator('.panel .actions').get_by_role('button', name='1번 시트', exact=True).click()
     pg.get_by_text('번 시트를 읽었어요').first.wait_for(timeout=120000)
-    pg.get_by_role('button', name='다듬').click(); pg.wait_for_timeout(500); pg.get_by_role('button', name='전체').click(); pg.wait_for_timeout(300)
+    pg.locator('.actions.sticky .btn.primary', has_text='다듬').click(); pg.wait_for_timeout(500); pg.get_by_role('button', name='전체').click(); pg.wait_for_timeout(300)
     labels=pg.locator('.cell .lbl b').all_inner_texts()
     print('first chars', ''.join(labels[:12]))
     assert ''.join(labels[:10])=='이다는에하고가을지로', labels[:10]

@@ -43,7 +43,7 @@ with sync_playwright() as p:
         pg.wait_for_function(f"() => document.body.innerText.split('시트를 읽었어요').length - 1 > {n0} || document.body.innerText.includes('큰 칸 2번 시트를 읽었어요')", timeout=120000)
         pg.wait_for_timeout(500)
     ok(pg.get_by_text('큰 칸 2번 시트를 읽었어요').count()>=1, 'both kids sheets read by QR')
-    pg.get_by_role('button', name='다듬').click(); pg.wait_for_timeout(400)
+    pg.locator('.actions.sticky .btn.primary', has_text='다듬').click(); pg.wait_for_timeout(400)
     pg.get_by_role('button', name='전체').click(); pg.wait_for_timeout(200)
     ok(pg.locator('.grid .cell').count()==60, 'review shows 60 kids cells (50 hangul + 10 digits)')
     pg.get_by_role('button', name='자모 확인하기').click(); pg.wait_for_timeout(400)

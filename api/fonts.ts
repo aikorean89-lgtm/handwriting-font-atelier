@@ -4,8 +4,11 @@
 //   DELETE /api/fonts?id=…&key=…      올린 브라우저의 열쇠 또는 x-admin-token(GALLERY_ADMIN_TOKEN)
 //   PATCH  /api/fonts?id=…&key=…      { tags } 태그 고치기 (올린 브라우저의 열쇠 또는 관리자)
 //   POST   /api/fonts?like=…&on=1|0   좋아요 (x-voter: 브라우저마다 만든 임의 번호)
-// 필요한 환경 변수: BLOB_READ_WRITE_TOKEN (Vercel 대시보드에서 Blob 저장소를 연결하면 자동으로 생김)
-import { del, list, put } from '@vercel/blob'
+//   GET    /api/fonts?health=1        저장소가 연결됐는지 (연결 안 됨: 503)
+//   GET    /api/fonts?file=gallery/…  비공개(private) 저장소일 때 폰트·견본 파일을 대신 내려준다
+// 저장소: Vercel 대시보드 › 프로젝트 › Storage에서 Blob 저장소를 연결하면 BLOB_READ_WRITE_TOKEN
+// 또는 BLOB_STORE_ID(+ 자동 OIDC 인증)가 생긴다. 공개·비공개 저장소 모두 쓸 수 있다.
+import { del, get, list, put } from '@vercel/blob'
 
 export interface PublicFont { id: string; name: string; author: string; createdAt: number; ttfUrl: string; previewUrl: string; direct: number; sizeKB: number; tags?: string[]; likes?: number; liked?: boolean }
 interface Meta extends PublicFont { keyHash: string; spaceHash?: string }
@@ -14,8 +17,16 @@ export interface Store {
   put(path: string, body: Blob | string, contentType: string, overwrite?: boolean): Promise<{ url: string }>
   list(prefix: string): Promise<{ pathname: string; url: string; uploadedAt: number }[]>
   read(url: string): Promise<string | null>
+  /** 주소 또는 경로(pathname)로 지운다 */
   del(urls: string[]): Promise<void>
+  /** 비공개 저장소: 파일 주소로 바로 열 수 없어 /api/fonts?file= 로 대신 내려준다 */
+  readonly private?: boolean
+  readFile?(path: string): Promise<{ body: ReadableStream<Uint8Array> | Blob; type: string } | null>
 }
+const FILE_RE = /^gallery\/(fonts\/[a-z0-9]{8,32}\.ttf|previews\/[a-z0-9]{8,32}\.png)$/
+const ttfPath = (id: string) => `gallery/fonts/${id}.ttf`
+const pngPath = (id: string) => `gallery/previews/${id}.png`
+const viaApi = (path: string) => `/api/fonts?file=${encodeURIComponent(path)}`
 
 const MAX_TTF = 3 * 1024 * 1024
 const MAX_PNG = 800 * 1024
@@ -57,8 +68,18 @@ async function readMeta(store: Store, id: string): Promise<{ meta: Meta; url: st
 }
 
 export async function handle(req: Request, store: Store | null, env: { GALLERY_ADMIN_TOKEN?: string } = {}): Promise<Response> {
-  if (!store) return json({ error: '갤러리 저장소가 아직 연결되지 않았어요.' }, 503)
+  if (!store) return json({ error: '갤러리 저장소가 아직 연결되지 않았어요.', setup: true }, 503)
   const url = new URL(req.url)
+
+  if (req.method === 'GET' && url.searchParams.has('health')) return json({ ok: true, private: !!store.private })
+
+  if (req.method === 'GET' && url.searchParams.has('file')) {
+    const path = url.searchParams.get('file') || ''
+    if (!FILE_RE.test(path) || !store.readFile) return json({ error: '잘못된 요청이에요.' }, 400)
+    const f = await store.readFile(path)
+    if (!f) return json({ error: '파일이 없어요.' }, 404)
+    return new Response(f.body, { headers: { 'content-type': f.type, 'cache-control': 'public, max-age=86400' } })
+  }
 
   if (req.method === 'GET') {
     const metas = (await store.list('gallery/meta/')).sort((a, b) => b.uploadedAt - a.uploadedAt).slice(0, MAX_LIST)
@@ -80,7 +101,7 @@ export async function handle(req: Request, store: Store | null, env: { GALLERY_A
         return strip(meta)
       } catch { return null }
     }))).filter((x): x is PublicFont => !!x)
-      .map((f) => ({ ...f, tags: f.tags ?? [], likes: likes.get(f.id) ?? 0, liked: mine.has(f.id) }))
+      .map((f) => ({ ...f, ...(store.private ? { ttfUrl: viaApi(ttfPath(f.id)), previewUrl: viaApi(pngPath(f.id)) } : {}), tags: f.tags ?? [], likes: likes.get(f.id) ?? 0, liked: mine.has(f.id) }))
       .sort((a, b) => b.createdAt - a.createdAt)
     return json({ fonts })
   }
@@ -118,11 +139,11 @@ export async function handle(req: Request, store: Store | null, env: { GALLERY_A
     const id = Date.now().toString(36) + hex(crypto.getRandomValues(new Uint8Array(4)).buffer)
     const key = hex(crypto.getRandomValues(new Uint8Array(24)).buffer)
     const [t, p] = await Promise.all([
-      store.put(`gallery/fonts/${id}.ttf`, ttf, 'font/ttf'),
-      store.put(`gallery/previews/${id}.png`, preview, 'image/png'),
+      store.put(ttfPath(id), ttf, 'font/ttf'),
+      store.put(pngPath(id), preview, 'image/png'),
     ])
     const meta: Meta = {
-      id, name, author: clean(fd.get('author'), 20), createdAt: Date.now(), ttfUrl: t.url, previewUrl: p.url,
+      id, name, author: clean(fd.get('author'), 20), createdAt: Date.now(), ttfUrl: store.private ? viaApi(ttfPath(id)) : t.url, previewUrl: store.private ? viaApi(pngPath(id)) : p.url,
       direct: Math.max(0, Math.min(11172, Number(fd.get('direct')) || 0)), sizeKB: Math.round(ttf.size / 1024), keyHash: await sha(key),
       tags: cleanTags(fd.get('tags')),
       ...(fd.get('space') ? { spaceHash: (await spaceKey(fd.get('space'))) ?? undefined } : {}),
@@ -154,7 +175,7 @@ export async function handle(req: Request, store: Store | null, env: { GALLERY_A
     const key = url.searchParams.get('key') || ''
     if (!admin && (!key || (await sha(key)) !== found.meta.keyHash)) return json({ error: '이 글씨체를 내릴 권한이 없어요.' }, 403)
     const likes = (await store.list(`gallery/likes/${id}/`)).map((b) => b.url)
-    await store.del([found.url, found.meta.ttfUrl, found.meta.previewUrl, ...likes].filter(Boolean))
+    await store.del([found.url, ttfPath(id), pngPath(id), ...likes])
     return json({ ok: true })
   }
 
@@ -162,12 +183,29 @@ export async function handle(req: Request, store: Store | null, env: { GALLERY_A
 }
 
 function blobStore(): Store | null {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) return null
+  // 예전 방식(읽기·쓰기 토큰)과 새 방식(BLOB_STORE_ID + 자동 OIDC 인증) 모두 받는다
+  if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.BLOB_STORE_ID) return null
+  let access: 'public' | 'private' = process.env.BLOB_ACCESS === 'private' ? 'private' : 'public'
+  const flip = (e: unknown) => access === 'public' && /private|access/i.test(String((e as Error)?.message ?? e))
+  // 공개로 시도해 보고, 비공개 저장소라서 거절되면 비공개로 바꿔 다시 한다
+  const both = async <T>(fn: (a: 'public' | 'private') => Promise<T>): Promise<T> => {
+    try { return await fn(access) } catch (e) {
+      if (!flip(e)) throw e
+      access = 'private'
+      return fn('private')
+    }
+  }
+  const fetchBlob = (u: string) => both(async (a) => {
+    const r = await get(u, { access: a, useCache: false })
+    if (r && r.statusCode !== 200 && a === 'public') throw new Error('access')
+    return r && r.statusCode === 200 ? r : null
+  })
   return {
-    put: async (path, body, contentType, overwrite) => {
-      const r = await put(path, body, { access: 'public', contentType, addRandomSuffix: false, cacheControlMaxAge: 60, allowOverwrite: !!overwrite })
+    get private() { return access === 'private' },
+    put: (path, body, contentType, overwrite) => both(async (a) => {
+      const r = await put(path, body, { access: a, contentType, addRandomSuffix: false, cacheControlMaxAge: 60, allowOverwrite: !!overwrite })
       return { url: r.url }
-    },
+    }),
     list: async (prefix) => {
       const out: { pathname: string; url: string; uploadedAt: number }[] = []
       let cursor: string | undefined
@@ -178,27 +216,40 @@ function blobStore(): Store | null {
       } while (cursor && out.length < 5000)
       return out
     },
-    read: async (u) => { const r = await fetch(u, { cache: 'no-store' }); return r.ok ? r.text() : null },
+    read: async (u) => {
+      const r = await fetchBlob(u).catch(() => null)
+      return r ? new Response(r.stream).text() : null
+    },
+    readFile: async (path) => {
+      const r = await fetchBlob(path).catch(() => null)
+      return r ? { body: r.stream, type: r.blob.contentType || 'application/octet-stream' } : null
+    },
     del: async (urls) => { if (urls.length) await del(urls) },
   }
 }
 
-const run = (req: Request) => handle(req, blobStore(), { GALLERY_ADMIN_TOKEN: process.env.GALLERY_ADMIN_TOKEN }).catch(() => json({ error: '잠시 뒤 다시 시도해 주세요.' }, 500))
+const run = (req: Request) => handle(req, blobStore(), { GALLERY_ADMIN_TOKEN: process.env.GALLERY_ADMIN_TOKEN }).catch((e) => {
+  console.error('[fonts api]', req.method, e) // Vercel 로그에서 원인을 볼 수 있게
+  return json({ error: '잠시 뒤 다시 시도해 주세요.', detail: String((e as Error)?.message ?? e).slice(0, 200) }, 500)
+})
 export const GET = run
 export const POST = run
 export const DELETE = run
 export const PATCH = run
 
 /** 테스트용 메모리 저장소 */
-export function memoryStore(): Store & { files: Map<string, { body: Blob | string; type: string; at: number }> } {
+export function memoryStore(opts: { private?: boolean } = {}): Store & { files: Map<string, { body: Blob | string; type: string; at: number }> } {
   const files = new Map<string, { body: Blob | string; type: string; at: number }>()
   let tick = 0
   const u = (p: string) => `mem://${p}`
+  const key = (x: string) => (x.startsWith('mem://') ? x.slice(6) : x)
   return {
     files,
+    private: !!opts.private,
+    readFile: async (path) => { const f = files.get(path); return f ? { body: typeof f.body === 'string' ? new Blob([f.body]) : f.body, type: f.type } : null },
     put: async (p, body, type) => { files.set(p, { body, type, at: ++tick }); return { url: u(p) } },
     list: async (prefix) => [...files.entries()].filter(([p]) => p.startsWith(prefix)).map(([p, f]) => ({ pathname: p, url: u(p), uploadedAt: f.at })),
     read: async (url) => { const f = files.get(url.slice(6)); return f ? (typeof f.body === 'string' ? f.body : await f.body.text()) : null },
-    del: async (urls) => { for (const x of urls) files.delete(x.slice(6)) },
+    del: async (urls) => { for (const x of urls) files.delete(key(x)) },
   }
 }

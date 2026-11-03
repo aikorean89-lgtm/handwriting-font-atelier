@@ -19,6 +19,16 @@ npm run build    # dist/ 에 정적 사이트 생성
 4. **갤러리를 쓰려면** Vercel 프로젝트의 Storage 탭에서 Blob 저장소를 만들어 이 프로젝트에 연결하세요. `BLOB_READ_WRITE_TOKEN`이 자동으로 생기고, 다시 배포하면 갤러리가 켜집니다. 연결 전에는 갤러리에 “저장소가 아직 연결되지 않았어요”가 보이고 폰트 만들기는 그대로 됩니다.
 5. (선택) 환경 변수 `GALLERY_ADMIN_TOKEN`에 긴 비밀 문자열을 넣으면, 그 브라우저에서 `주소/#gallery?admin=비밀문자열`을 한 번 열어 다른 사람이 올린 글씨체도 내릴 수 있습니다.
 
+### 갤러리 저장소 연결 (배포한 사이트)
+
+갤러리가 "갤러리 저장소가 아직 연결되지 않았어요"라고 하면 Vercel에 Blob 저장소가 연결되지 않은 것입니다.
+1. Vercel 프로젝트 › **Storage** › Create Database › **Blob** (지역 Seoul icn1 권장, 공개·비공개 모두 가능)
+2. 만든 저장소를 프로젝트에 **Connect** (Production·Preview·Development)
+3. **Deployments** › 최근 배포 › **Redeploy** (환경 변수는 새 배포부터 적용)
+4. `https://사이트/api/fonts?health=1` 이 `{"ok":true}` 를 돌려주면 연결 완료
+
+서버는 `BLOB_READ_WRITE_TOKEN`(예전 방식)과 `BLOB_STORE_ID`+OIDC(새 방식)를 모두 받고, 비공개 저장소면 폰트·견본을 `/api/fonts?file=` 로 대신 내려줍니다. 저장소가 없으면 내보내기 화면에서 공개를 미리 끄고 이유를 알려 줍니다.
+
 ### 갤러리 저장 방식
 
 | 실행 환경 | 저장소 | 내 글씨체 알아보기 | 관리 |
@@ -107,6 +117,7 @@ npm run build    # dist/ 에 정적 사이트 생성
 - `devserver.ts`: dist + 메모리 갤러리 API 시험 서버 (포트 4180)
 - `v12.py`: 굵기·자간, 자동 문장부호, 보충 시트(PDF→합성 손글씨→업로드→교체), 갤러리 공개·검색·내리기·관리자
 - `real.html`, `realrun.py`, `compare.py`, `segsheet.py`, `groupsheet.py`, `metric.py`: 실제 사용자 폰트(`tests/user.ttf`, 저장소에 올리지 않음)의 직접 쓴 글자를 칸 그림으로 되돌려 자모 분리·조합을 다시 돌려 보고 비교하는 도구 (`npx vite --port 5179` 후 실행)
+- `storage.py`: 저장소 미연결(`STORE=none`)·비공개 저장소(`STORE=private`) 시험 서버로 내보내기·갤러리 확인
 - `v15.py`: 큰 칸 모드, 분석, 스티커, 두 글씨 섞기, 학교 공간, 성장 기록, 손편지 모드, 휴대폰 폭·설치 단추
 - `offline.py`: 서비스 워커로 받아 둔 뒤 인터넷을 끊고 폰트 만들기
 - `synthkids.py`, `letter.html`: 큰 칸 시트·가상 손편지 사진 만들기

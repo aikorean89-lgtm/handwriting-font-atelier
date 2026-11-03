@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Head } from '../ui/common'
 import { writeFont, type BuildResult } from '../engine/build'
 import { SaveDeclined, saveFile } from '../platform'
@@ -14,6 +14,13 @@ export function ExportScreen({ result, name, onName, onGallery, onGrowth }: {
   result: BuildResult; name: string; onName: (n: string) => void; onGallery: () => void; onGrowth: () => void
 }) {
   const [share, setShare] = useState(true)
+  // 갤러리 저장소가 연결돼 있는지 미리 본다 (연결 안 됐으면 공개를 끄고 이유를 알려 준다)
+  const [galleryOk, setGalleryOk] = useState<boolean | null>(null)
+  useEffect(() => {
+    let live = true
+    gallery().canPublish().then((ok) => { if (!live) return; setGalleryOk(ok); if (ok === false) setShare(false) }).catch(() => {})
+    return () => { live = false }
+  }, [])
   const [author, setAuthor] = useState(() => { try { return localStorage.getItem('fontgongbang.author') ?? '' } catch { return '' } })
   const [pub, setPub] = useState<Pub>({ k: 'idle' })
   const [draft, setDraft] = useState(name || '')
@@ -92,9 +99,12 @@ export function ExportScreen({ result, name, onName, onGallery, onGrowth }: {
       </div>
 
       <label className="share-opt">
-        <input type="checkbox" checked={share} onChange={(e) => setShare(e.target.checked)} disabled={!!sealed} />
+        <input type="checkbox" checked={share} onChange={(e) => setShare(e.target.checked)} disabled={!!sealed || galleryOk === false} />
         <span><b>갤러리에 공개하기</b> 낙관을 찍으면 이 폰트 파일과 견본이 글씨체 갤러리에 올라가, 다른 사람도 보고 내려받을 수 있어요. 원본 사진은 올라가지 않아요. 언제든 내릴 수 있어요.</span>
       </label>
+      {galleryOk === false && (
+        <p className="note gallery-off" role="status">지금은 이 사이트에 <b>갤러리 저장소가 연결되지 않아</b> 갤러리에 올릴 수 없어요. 폰트 파일 내려받기와 성장 기록 저장은 그대로 돼요. (관리자가 Vercel에서 Blob 저장소를 연결하면 바로 열려요)</p>
+      )}
       {share && !sealed && (
         <div className="tag-field">
           <span className="note">내 글씨를 설명하는 태그 (3개까지, 갤러리에서 찾을 때 쓰여요)</span>
@@ -148,7 +158,7 @@ export function ExportScreen({ result, name, onName, onGallery, onGrowth }: {
           {pub.k === 'error' && <><span>{pub.msg}</span><button className="btn small quiet" onClick={() => publish(writeFont(result.glyphs, sealed.family), sealed.blob)}>다시 시도</button></>}
         </div>
       )}
-      {sealed && !share && pub.k === 'idle' && (
+      {sealed && !share && pub.k === 'idle' && galleryOk !== false && (
         <p className="note">갤러리에 올리지 않았어요. <button className="linkish" onClick={() => { setShare(true); publish(writeFont(result.glyphs, sealed.family), sealed.blob) }}>지금 올리기</button></p>
       )}
 

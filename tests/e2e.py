@@ -26,7 +26,7 @@ with sync_playwright() as p:
         print('sheet',ph,'processed in %.1fs'%(time.time()-t0)); t0=time.time()
     pg.locator('.check').scroll_into_view_if_needed(); shot(pg,'03-capture')
     print('alerts:', [t for t in pg.locator('[role=alert],[role=status]').all_inner_texts()])
-    pg.get_by_role('button', name='다듬').click(); pg.wait_for_timeout(500); shot(pg,'04-review')
+    pg.locator('.actions.sticky .btn.primary', has_text='다듬').click(); pg.wait_for_timeout(500); shot(pg,'04-review')
     print('review head:', pg.locator('h1').inner_text())
     pg.get_by_role('button', name='자모 확인하기').click(); pg.wait_for_timeout(600); shot(pg,'05-jamo')
     print('jamo head:', pg.locator('h1').inner_text())

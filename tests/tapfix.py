@@ -8,7 +8,7 @@ with sync_playwright() as p:
     pg.get_by_role('button', name='다 썼어요, 찍으러 가기').click()
     pg.locator('[data-testid=sheet-file]').set_input_files(f'{root}/photo-q-pen.jpg')
     pg.get_by_text('번 시트를 읽었어요').first.wait_for(timeout=60000)
-    pg.get_by_role('button', name='다듬').click(); pg.get_by_role('button', name='자모 확인하기').click(); pg.wait_for_timeout(400)
+    pg.locator('.actions.sticky .btn.primary', has_text='다듬').click(); pg.get_by_role('button', name='자모 확인하기').click(); pg.wait_for_timeout(400)
     before=pg.locator('h1').inner_text()
     pg.locator('.grid .cell').first.click(); pg.wait_for_timeout(300)
     cv=pg.locator('.sheet-modal canvas')

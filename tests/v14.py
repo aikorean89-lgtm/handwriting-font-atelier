@@ -29,7 +29,7 @@ with sync_playwright() as p:
     pg.get_by_role('button', name='다 썼어요, 찍으러 가기').click(); pg.wait_for_timeout(300)
     pg.locator('[data-testid=sheet-file]').set_input_files(f'{T}/photo2-q-pen.jpg')
     pg.get_by_text('번 시트를 읽었어요').first.wait_for(timeout=120000)
-    pg.get_by_role('button', name='다듬').click(); pg.wait_for_timeout(300)
+    pg.locator('.actions.sticky .btn.primary', has_text='다듬').click(); pg.wait_for_timeout(300)
     pg.get_by_role('button', name='자모 확인하기').click(); pg.wait_for_timeout(300)
     pg.get_by_role('button', name='폰트 만들기').click()
     pg.get_by_text('문장으로 써 보세요').wait_for(timeout=180000); pg.wait_for_timeout(1200)

@@ -12,6 +12,22 @@ const post = (name: string, t = ttf) => {
 }
 
 ok((await handle(new Request(base), null)).status === 503, 'no store → 503')
+ok((await (await handle(new Request(`${base}?health=1`), null)).json()).setup === true, 'health without store says setup needed')
+ok((await (await handle(new Request(`${base}?health=1`), store)).json()).ok === true, 'health ok')
+// 비공개 저장소: 파일은 /api/fonts?file= 로 대신 내려준다
+{
+  const ps = memoryStore({ private: true })
+  const fd = new FormData(); fd.set('name', '비공개 글씨'); fd.set('ttf', ttf, 'a.ttf'); fd.set('preview', png, 'p.png')
+  const pr = await (await handle(new Request(base, { method: 'POST', body: fd }), ps)).json()
+  ok(pr.font.ttfUrl.startsWith('/api/fonts?file=gallery%2Ffonts%2F'), 'private store: ttf served via api')
+  const pl = await (await handle(new Request(base), ps)).json()
+  ok(pl.fonts[0].previewUrl.startsWith('/api/fonts?file=gallery%2Fpreviews%2F'), 'private store: list uses api urls')
+  const fr = await handle(new Request(new URL(pl.fonts[0].ttfUrl, base)), ps)
+  ok(fr.status === 200 && fr.headers.get('content-type') === 'font/ttf' && new Uint8Array(await fr.arrayBuffer())[1] === 1, 'file proxy returns ttf')
+  ok((await handle(new Request(`${base}?file=../secret`), ps)).status === 400, 'file proxy rejects other paths')
+  ok((await handle(new Request(`${base}?file=gallery%2Fmeta%2Fx.json`), ps)).status === 400, 'file proxy refuses meta (delete keys)')
+  ok((await handle(new Request(`${base}?id=${pr.font.id}&key=${pr.key}`, { method: 'DELETE' }), ps)).status === 200 && ps.files.size === 0, 'private store delete removes all files')
+}
 let r = await handle(new Request(base), store); ok((await r.json()).fonts.length === 0, 'empty list')
 r = await post('첫 글씨'); ok(r.status === 201, 'publish 201')
 const a = await r.json(); ok(!!a.key && a.font.author === '쪼아쌤' && !('keyHash' in a.font), 'sanitized, key returned, hash hidden')

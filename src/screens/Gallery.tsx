@@ -36,6 +36,7 @@ function Heart({ on }: { on: boolean }) {
 export function GalleryScreen({ onMake }: { onMake: () => void }) {
   const [fonts, setFonts] = useState<GalleryFont[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [setup, setSetup] = useState(false) // 사이트에 저장소가 아직 연결되지 않음
   const [q, setQ] = useState('')
   const [sort, setSort] = useState<Sort>('new')
   const [tag, setTag] = useState<string | null>(null)
@@ -52,7 +53,10 @@ export function GalleryScreen({ onMake }: { onMake: () => void }) {
 
   const load = (sp = space) => {
     setErr(null); setFonts(null)
-    gallery().list(sp || undefined).then(setFonts).catch((e) => { setErr(e instanceof GalleryError ? e.message : '갤러리를 불러오지 못했어요.'); setFonts([]) })
+    gallery().list(sp || undefined).then((f) => { setSetup(false); setFonts(f) }).catch((e) => {
+      if (e instanceof GalleryError && e.setup) { setSetup(true); setFonts([]); return }
+      setErr(e instanceof GalleryError ? e.message : '갤러리를 불러오지 못했어요.'); setFonts([])
+    })
   }
   const enterSpace = (code: string) => {
     const c = code.trim()
@@ -142,10 +146,28 @@ export function GalleryScreen({ onMake }: { onMake: () => void }) {
         </div>
       )}
 
+      {setup && (
+        <div className="setup-box" role="status">
+          <p><b>갤러리를 준비하고 있어요.</b> 이 사이트에 글씨체를 모아 둘 저장소가 아직 연결되지 않아, 지금은 갤러리를 볼 수도 올릴 수도 없어요. 폰트 만들기와 내려받기는 그대로 돼요.</p>
+          <details>
+            <summary>사이트 관리자라면: 저장소 연결 방법 (5분)</summary>
+            <ol>
+              <li>vercel.com에 로그인해 이 사이트의 프로젝트를 엽니다.</li>
+              <li>위쪽 <b>Storage</b> 탭 → <b>Create Database</b> → <b>Blob</b>을 고르고 이름(예: fontgongbang-gallery)을 정해 만듭니다. 지역은 Seoul(icn1)이 좋아요.</li>
+              <li>만든 저장소를 이 프로젝트에 <b>Connect</b>합니다. Production·Preview·Development를 모두 체크하세요.</li>
+              <li><b>Deployments</b> 탭에서 가장 최근 배포의 ⋯ → <b>Redeploy</b>를 누릅니다. 연결은 새로 배포해야 적용돼요.</li>
+              <li>이 화면을 새로 고치면 갤러리가 열려요.</li>
+            </ol>
+            <p className="note">공개(Public)·비공개(Private) 저장소 어느 쪽이든 돼요. 관리자 열쇠를 쓰려면 Settings → Environment Variables에 GALLERY_ADMIN_TOKEN을 넣으세요.</p>
+          </details>
+          <button className="btn small quiet" onClick={() => load()}>다시 확인</button>
+        </div>
+      )}
+
       {err && <div className="error" role="alert">{err} <button className="btn small quiet" onClick={() => load()}>다시 불러오기</button></div>}
       {likeErr && <div className="error" role="alert">{likeErr}</div>}
 
-      {fonts && !err && fonts.length === 0 && (
+      {fonts && !err && !setup && fonts.length === 0 && (
         <div className="gallery-empty">
           <span className="seal-big" aria-hidden>글</span>
           <p><b>{space ? `‘${space}’ 공간에 아직 올라온 글씨체가 없어요.` : '아직 올라온 글씨체가 없어요.'}</b><br />{space ? '폰트를 만들고 마지막 단계에서 ‘우리 학교 공간에만’을 고른 뒤 같은 코드를 넣으세요.' : '처음으로 내 손글씨를 올려 보세요. 마지막 단계에서 공개를 고르면 여기에 보여요.'}</p>

@@ -35,7 +35,12 @@ export interface GalleryBackend {
   canPublish(): Promise<boolean | null>
 }
 
-export class GalleryError extends Error {}
+export class GalleryError extends Error {
+  /** 사이트에 갤러리 저장소가 아직 연결되지 않음 (관리자가 Vercel에서 연결해야 함) */
+  setup = false
+  constructor(msg: string, setup = false) { super(msg); this.setup = setup }
+}
+export const SETUP_MSG = '갤러리 저장소가 아직 연결되지 않았어요.'
 
 const MAX_MINE = 6
 const clean = (s: string, n: number) => s.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, n)
@@ -187,7 +192,7 @@ class HttpBackend implements GalleryBackend {
   private base = `${import.meta.env.BASE_URL}api/fonts`.replace('./', '/')
   async list(space?: string) {
     const r = await fetch(space ? `${this.base}?space=${encodeURIComponent(space)}` : this.base, { headers: { accept: 'application/json', 'x-voter': voter() }, cache: 'no-store' }).catch(() => null)
-    if (!r || !r.ok) throw new GalleryError(r?.status === 503 ? '갤러리 저장소가 아직 연결되지 않았어요.' : '갤러리를 불러오지 못했어요.')
+    if (!r || !r.ok) throw r?.status === 503 ? new GalleryError(SETUP_MSG, true) : new GalleryError('갤러리를 불러오지 못했어요.')
     const body = await r.json().catch(() => null)
     if (!body || !Array.isArray(body.fonts)) throw new GalleryError('갤러리를 불러오지 못했어요.')
     const keys = myKeys()
@@ -201,7 +206,7 @@ class HttpBackend implements GalleryBackend {
     const r = await fetch(this.base, { method: 'POST', body: fd }).catch(() => null)
     if (!r) throw new GalleryError('인터넷 연결을 확인해 주세요.')
     const body = await r.json().catch(() => ({}))
-    if (!r.ok) throw new GalleryError(body.error || '갤러리에 올리지 못했어요.')
+    if (!r.ok) throw r.status === 503 ? new GalleryError(SETUP_MSG, true) : new GalleryError(body.error || '갤러리에 올리지 못했어요.')
     setMyKeys({ ...myKeys(), [body.font.id]: body.key })
     return { ...body.font, tags: body.font.tags ?? [], likes: 0, liked: false, mine: true }
   }
@@ -229,7 +234,13 @@ class HttpBackend implements GalleryBackend {
     const k = myKeys(); delete k[id]; setMyKeys(k)
   }
   async canModerate() { return !!adminToken() }
-  async canPublish() { return null }
+  /** 저장소가 연결됐는지 미리 본다: true 연결됨, false 연결 안 됨, null 알 수 없음(인터넷 등) */
+  async canPublish() {
+    const r = await fetch(`${this.base}?health=1`, { cache: 'no-store' }).catch(() => null)
+    if (!r) return null
+    if (r.status === 503) return false
+    return r.ok ? true : null
+  }
 }
 
 let backend: GalleryBackend | null = null

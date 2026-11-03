@@ -1,0 +1,29 @@
+<!doctype html><meta charset="utf-8"><body>
+<script type="module">
+import '@fontsource-variable/hahmlet'
+import { splitForDisplay } from '/src/engine/refmask.ts'
+window.go = async (ch, split) => {
+  const SIZE = 900, font = `800 ${Math.round(SIZE * 0.9)}px "Hahmlet Variable", serif`
+  await document.fonts.load(font, ch)
+  const p = splitForDisplay(ch, SIZE, font)
+  const W = Math.round(SIZE * 1.5), c = document.createElement('canvas'); c.width = W; c.height = W
+  const x = c.getContext('2d')
+  const layers = [[p.cho, [194, 80, 47], -0.11, -0.06], [p.jung, [47, 138, 115], 0.12, -0.02], [p.jong, [176, 132, 26], 0, 0.12]]
+  for (const [m, col, dx, dy] of layers) {
+    if (!m) continue
+    const t = document.createElement('canvas'); t.width = SIZE; t.height = SIZE
+    const tc = t.getContext('2d'), img = tc.createImageData(SIZE, SIZE)
+    for (let i = 0; i < m.length; i++) if (m[i]) img.data.set([...col, 255], i * 4)
+    tc.putImageData(img, 0, 0)
+    x.drawImage(t, (W - SIZE) / 2 + dx * SIZE * split, (W - SIZE) / 2 + dy * SIZE * split)
+  }
+  // 잉크 영역만 잘라 낸다
+  const d = x.getImageData(0, 0, W, W).data
+  let x0 = W, y0 = W, x1 = 0, y1 = 0
+  for (let y = 0; y < W; y++) for (let X = 0; X < W; X++) if (d[(y * W + X) * 4 + 3]) { x0 = Math.min(x0, X); y0 = Math.min(y0, y); x1 = Math.max(x1, X); y1 = Math.max(y1, y) }
+  const pad = 20, o = document.createElement('canvas'); o.width = x1 - x0 + pad * 2; o.height = y1 - y0 + pad * 2
+  o.getContext('2d').drawImage(c, x0 - pad, y0 - pad, o.width, o.height, 0, 0, o.width, o.height)
+  return o.toDataURL('image/png')
+}
+window.ready = true
+</script>

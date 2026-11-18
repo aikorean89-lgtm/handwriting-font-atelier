@@ -59,11 +59,11 @@ export function Home({ work, onStartNew, onResume, onGallery, onGrowth }: { work
           <nav className="hub" aria-label="더 둘러보기">
             <button className="hub-tab accent" onClick={onGallery}>
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><rect x="2" y="2" width="5" height="5" /><rect x="9" y="2" width="5" height="5" /><rect x="2" y="9" width="5" height="5" /><rect x="9" y="9" width="5" height="5" /></svg>
-              <span><b>글씨체 갤러리</b><small>다른 사람이 만든 글씨 구경</small></span>
+              <span><b>글씨체<br className="m-br" /> 갤러리</b><small>다른 사람이 만든 글씨 구경</small></span>
             </button>
             <button className="hub-tab" onClick={onGrowth}>
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><path d="M2 13.5h12M3.5 11l3-3.5 2.5 2 4-5" /><path d="M10.5 4.5H13V7" /></svg>
-              <span><b>내 글씨 성장 기록</b><small>날짜별로 나란히 비교</small></span>
+              <span><b>내 글씨<br className="m-br" /> 성장 기록</b><small>날짜별로 나란히 비교</small></span>
             </button>
             {pwa.supported && (
               <button className="hub-tab" aria-expanded={installHelp} onClick={async () => {
@@ -72,7 +72,7 @@ export function Home({ work, onStartNew, onResume, onGallery, onGrowth }: { work
                 setInstallHelp((v) => !v)
               }}>
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><rect x="4" y="1.5" width="8" height="13" rx="1.5" /><path d="M8 4.5v5M5.8 7.5 8 9.7l2.2-2.2M7 12.5h2" /></svg>
-                <span><b>{pwa.installed ? '앱으로 설치됨' : '앱으로 설치하기'}</b><small>{pwa.installed ? '인터넷 없이도 열려요' : '인터넷 없는 교실에서도'}</small></span>
+                <span><b>앱으로<br className="m-br" /> {pwa.installed ? '설치됨' : '설치하기'}</b><small>{pwa.installed ? '인터넷 없이도 열려요' : '인터넷 없는 교실에서도'}</small></span>
               </button>
             )}
           </nav>
@@ -103,7 +103,7 @@ export function Home({ work, onStartNew, onResume, onGallery, onGrowth }: { work
           </section>
 
           <section className="how" aria-label="만드는 순서">
-            <div><b>01</b><h3>고르기</h3><p>빠른 모드(1장) 또는 일반 모드(4장)</p></div>
+            <div><b>01</b><h3>고르기</h3><p>빠른 모드 또는 일반 모드</p></div>
             <div><b>02</b><h3>쓰기</h3><p>칸 위 글자를 평소 글씨로 따라 쓰기</p></div>
             <div><b>03</b><h3>찍기</h3><p>네 모서리 마커가 보이게 촬영</p></div>
             <div><b>04</b><h3>다듬기</h3><p>잘못 잘린 칸과 자모만 고치기</p></div>

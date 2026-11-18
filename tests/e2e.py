@@ -7,7 +7,7 @@ out=sys.argv[3] if len(sys.argv)>3 else 'out-quick.ttf'
 W=int(os.environ.get('VW','1280')); H=int(os.environ.get('VH','900'))
 def shot(pg,name): pg.screenshot(path=f'{root}/shots/{tier}-{name}.png', full_page=False)
 with sync_playwright() as p:
-    b=p.chromium.launch(executable_path='/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell')
+    b=p.chromium.launch()
     ctx=b.new_context(viewport={'width':W,'height':H}, device_scale_factor=1, accept_downloads=True)
     pg=ctx.new_page(); errs=[]
     pg.on('console', lambda m: errs.append(m.text) if m.type=='error' else None)

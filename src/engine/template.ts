@@ -29,9 +29,9 @@ export const PAGE_H = LAYOUT.page[1] * PX_PER_MM
 
 export type Tier = 'quick' | 'standard' | 'kids' | 'letter'
 export const TIERS: Record<Tier, { label: string; sheets: number[]; minutes: number; hangul: number; desc: string; extra: string; pdf: string; preview: string; minDraw: number }> = {
-  quick: { label: '빠른 모드', sheets: [1], minutes: 7, hangul: 90, desc: '한 장, 100칸. 처음이라면 여기서 시작하세요.', extra: '숫자만', pdf: 'jaguk-template-v2.pdf', preview: 'sheet-1.png', minDraw: 30 },
-  standard: { label: '일반 모드', sheets: [1, 2, 3, 4], minutes: 25, hangul: 225, desc: '네 장, 영문과 기호까지. 자모 모양을 모두 직접 받아 더 닮습니다.', extra: '영문 52자, 기호 32자', pdf: 'jaguk-template-v2.pdf', preview: 'sheet-1.png', minDraw: 30 },
-  kids: { label: '큰 칸 모드', sheets: [11, 12], minutes: 12, hangul: 50, desc: '저학년·처음 쓰는 아이용. 칸이 크고(28mm) 아는 글자 위주예요. 1장만 써도 돼요.', extra: '숫자만 (2번 시트)', pdf: 'jaguk-template-kids-v2.pdf', preview: 'sheet-kids.png', minDraw: 15 },
+  quick: { label: '빠른 모드', sheets: [1], minutes: 7, hangul: 90, desc: '한 장, 100칸이에요. 처음이라면 여기서 시작하세요.', extra: '숫자만', pdf: 'jaguk-template-v2.pdf', preview: 'sheet-1.png', minDraw: 30 },
+  standard: { label: '일반 모드', sheets: [1, 2, 3, 4], minutes: 25, hangul: 225, desc: '네 장에 영문과 기호까지 써요. 자모 모양을 모두 직접 받아 더 닮아요.', extra: '영문 52자, 기호 32자', pdf: 'jaguk-template-v2.pdf', preview: 'sheet-1.png', minDraw: 30 },
+  kids: { label: '큰 칸 모드', sheets: [11, 12], minutes: 12, hangul: 50, desc: '아는 글자 위주의 큰 칸(28mm)이라 저학년도 쉬워요. 1장만 써도 돼요.', extra: '숫자만 (2번 시트)', pdf: 'jaguk-template-kids-v2.pdf', preview: 'sheet-kids.png', minDraw: 15 },
   letter: { label: '손편지 모드', sheets: [21], minutes: 10, hangul: 0, desc: '편지·공책 사진에서 글자를 골라 만들어요.', extra: '사진에 있는 것만', pdf: 'jaguk-template-v2.pdf', preview: 'sheet-1.png', minDraw: 0 },
 }
 

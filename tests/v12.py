@@ -13,7 +13,7 @@ class Q(http.server.SimpleHTTPRequestHandler):
 srv=http.server.ThreadingHTTPServer(('127.0.0.1',8765),functools.partial(Q, directory=root)); threading.Thread(target=srv.serve_forever,daemon=True).start()
 layout=json.load(open(f'{root}/src/data/template-layout.json'))
 with sync_playwright() as p:
-    b=p.chromium.launch(executable_path='/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell')
+    b=p.chromium.launch()
     ctx=b.new_context(viewport={'width':1280,'height':900}, accept_downloads=True)
     pg=ctx.new_page(); errs=[]
     pg.on('pageerror', lambda e: errs.append(str(e)))
@@ -74,7 +74,7 @@ with sync_playwright() as p:
     pg.fill('#play',''.join(want)); pg.wait_for_timeout(400); pg.locator('.play-input').screenshot(path=f'{S}/v12-07-supp-chars.png')
     # 내보내기 + 갤러리 공개
     pg.get_by_role('button', name='이름 짓고 내려받기').click(); pg.wait_for_timeout(400)
-    pg.fill('#fname','쪼아쌤 손글씨'); pg.fill('#fauthor','쪼아쌤')
+    pg.fill('#fname','쪼아쌤 손글씨')
     ok(pg.locator('.share-opt input').is_checked(),'gallery share checked by default')
     pg.locator('.seal-btn').focus(); pg.keyboard.press('Enter')
     pg.get_by_text('갤러리에 올렸어요').wait_for(timeout=30000); pg.wait_for_timeout(300)
@@ -87,6 +87,8 @@ with sync_playwright() as p:
     pg.fill('.gdetail textarea','갤러리에서 써 보는 손글씨'); pg.wait_for_timeout(300); shot(pg,'10-detail')
     with pg.expect_download() as d: pg.locator('.gdetail').get_by_role('button', name='TTF 내려받기').click()
     d.value.save_as(f'{T}/out-gallery.ttf'); print('gallery dl', d.value.suggested_filename, os.path.getsize(f'{T}/out-gallery.ttf'))
+    ok(d.value.suggested_filename.startswith('폰트공방 '),'gallery download named by number')
+    ok('쪼아쌤'.encode('utf-16-be') not in open(f'{T}/out-gallery.ttf','rb').read(),'gallery font file has no personal name inside')
     pg.get_by_role('button', name='갤러리에서 내리기').click(); pg.get_by_role('button', name='정말 내리기').click(); pg.wait_for_timeout(800)
     ok(pg.locator('.gcard:not(.skeleton)').count()==0,'removed from gallery'); ok(pg.get_by_text('아직 올라온 글씨체가 없어요').count()==1,'empty state'); shot(pg,'11-empty')
     # 다른 사람 글씨체 여러 개 (API로 바로) → 남의 것은 못 내림
@@ -96,7 +98,11 @@ with sync_playwright() as p:
         ok(r.status==201,f'seed {nm}')
     pg.goto(BASE+'#gallery'); pg.reload(); pg.wait_for_timeout(1500)
     ok(pg.locator('.gcard:not(.skeleton)').count()==3,'three cards listed'); shot(pg,'12-gallery-3')
-    pg.fill('.gallery-tools input','봄'); pg.wait_for_timeout(200); ok(pg.locator('.gcard:not(.skeleton)').count()==1,'search filters')
+    no=pg.locator('.gcard-no').nth(1).inner_text().replace('No.','')
+    pg.fill('.gallery-tools input',no.lower()); pg.wait_for_timeout(200); ok(pg.locator('.gcard:not(.skeleton)').count()==1,'search by number filters')
+    body=pg.locator('main').inner_text()
+    ok(all(x not in body for x in ['바다 글씨','하늘반','봄날체','3학년 2반']),'no names or authors on the page')
+    ok(pg.locator('.privacy-note').count()==1 and '모자이크' in pg.locator('.privacy-note').inner_text(),'privacy notice at top')
     pg.fill('.gallery-tools input','')
     pg.locator('.gcard button').first.click(); pg.wait_for_selector('.gdetail'); pg.wait_for_timeout(600)
     ok(pg.locator('.gdetail').get_by_role('button', name='갤러리에서 내리기').count()==0,"can't remove others' fonts")

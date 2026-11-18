@@ -1,7 +1,7 @@
 from playwright.sync_api import sync_playwright
 root='/home/claude/jaguk/tests'
 with sync_playwright() as p:
-    b=p.chromium.launch(executable_path='/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell')
+    b=p.chromium.launch()
     pg=b.new_page(viewport={'width':1280,'height':900}); errs=[]; pg.on('pageerror', lambda e: errs.append(str(e)))
     pg.goto('http://localhost:4180/'); pg.wait_for_timeout(1500)
     pg.get_by_role('button', name='폰트 만들기 시작').click(); pg.locator('.actions .btn.primary', has_text='로 하기').click()

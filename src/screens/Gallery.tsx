@@ -5,6 +5,7 @@ import { MAX_TAGS, TAGS } from '../gallery/tags'
 import { SaveDeclined, saveFile } from '../platform'
 import { InstallGuide } from '../ui/InstallGuide'
 import { StickerMaker } from '../ui/Sticker'
+import { Masked } from '../ui/Masked'
 
 const fmtDate = (t: number) => new Date(t).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
 type Sort = 'new' | 'popular'
@@ -89,25 +90,32 @@ export function GalleryScreen({ onMake }: { onMake: () => void }) {
   }, [fonts])
 
   const shown = useMemo(() => {
-    const t = q.trim()
-    const list = (fonts ?? []).filter((f) => (!t || f.name.includes(t) || f.author.includes(t)) && (!tag || f.tags.includes(tag)))
+    const t = q.trim().toUpperCase().replace(/^NO\.?\s*/, '')
+    const list = (fonts ?? []).filter((f) => (!t || f.no.includes(t)) && (!tag || f.tags.includes(tag)))
     return sort === 'popular' ? [...list].sort((a, b) => b.likes - a.likes || b.createdAt - a.createdAt) : list
   }, [fonts, q, tag, sort])
   const open = openId ? (fonts ?? []).find((f) => f.id === openId) ?? null : null
 
   return (
     <main className="wrap screen gallery">
+      <aside className="privacy-note" aria-label="개인정보 보호 안내">
+        <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden><rect x="3.5" y="9" width="13" height="9" fill="none" stroke="currentColor" strokeWidth="1.6" /><path d="M6.5 9V6.5a3.5 3.5 0 0 1 7 0V9" fill="none" stroke="currentColor" strokeWidth="1.6" /></svg>
+        <p>
+          개인정보 보호를 위해 글씨체 이름과 만든 사람은 모자이크로 가렸어요.<br />
+          글씨체는 번호로만 구분하고, 내려받아 설치해도 ‘폰트공방 번호’로 보여요.
+        </p>
+      </aside>
       <div className="gallery-head">
         <div>
           <p className="eyebrow">글씨체 갤러리</p>
           <h1>다른 사람의 손글씨를 둘러보세요</h1>
-          <p className="lede">폰트공방에서 만들고 공개한 글씨체입니다. 눌러서 문장을 써 보고, 마음에 들면 내려받을 수 있어요.</p>
+          <p className="lede">폰트공방에서 만들고 공개한 글씨체입니다.<br />눌러서 문장을 써 보고, 마음에 들면 내려받을 수 있어요.</p>
         </div>
         <button className="btn primary" onClick={onMake}>내 글씨로 만들기</button>
       </div>
 
       <div className="gallery-tools">
-        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="글씨체 이름이나 만든 사람" aria-label="글씨체 찾기" />
+        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="글씨체 번호로 찾기 (예: A3F2)" aria-label="글씨체 번호로 찾기" />
         <div className="seg" role="group" aria-label="정렬">
           <button aria-pressed={sort === 'new'} onClick={() => setSort('new')}>최신순</button>
           <button aria-pressed={sort === 'popular'} onClick={() => setSort('popular')}>인기순</button>
@@ -118,7 +126,7 @@ export function GalleryScreen({ onMake }: { onMake: () => void }) {
       {spaceOpen && (
         <div className="space-bar">
           <span>학교·학급에서 정한 <b>공간 코드</b>를 넣으면, 그 공간에 올린 글씨체만 모아 볼 수 있어요. 공간의 글씨체는 전체 갤러리에는 보이지 않아요.</span>
-          <input value={spaceDraft} maxLength={30} placeholder="예: 남성현초2026" aria-label="공간 코드" onChange={(e) => setSpaceDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') enterSpace(spaceDraft) }} />
+          <input value={spaceDraft} maxLength={30} placeholder="예: 우리학교2026" aria-label="공간 코드" onChange={(e) => setSpaceDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') enterSpace(spaceDraft) }} />
           <button className="btn small primary" onClick={() => enterSpace(spaceDraft)} disabled={spaceDraft.trim().length < 2}>들어가기</button>
           <button className="btn small quiet" onClick={() => setSpaceOpen(false)}>취소</button>
         </div>
@@ -180,16 +188,16 @@ export function GalleryScreen({ onMake }: { onMake: () => void }) {
         {fonts == null && Array.from({ length: 6 }, (_, i) => <li key={i} className="gcard skeleton" aria-hidden />)}
         {shown.map((f) => (
           <li key={f.id} className="gcard">
-            <button onClick={() => setOpenId(f.id)} aria-label={`${f.name} 자세히 보기`}>
+            <button onClick={() => setOpenId(f.id)} aria-label={`${f.no}번 글씨체 자세히 보기`}>
               <span className="gcard-img">{f.previewUrl ? <img src={f.previewUrl} alt="" loading="lazy" /> : <span className="note">미리보기 없음</span>}</span>
               <span className="gcard-meta">
-                <b>{f.name}</b>
-                <span>{f.author || '이름 없이'} · {fmtDate(f.createdAt)}</span>
+                <span className="gcard-name"><Masked seed={f.id} cols={9} rows={2} cell={10} label="가려진 글씨체 이름" /><span className="gcard-no">No.{f.no}</span></span>
+                <span className="gcard-by"><Masked seed={`${f.id}:by`} cols={6} rows={2} cell={7} label="가려진 만든 사람" /><span>{fmtDate(f.createdAt)}</span></span>
                 {f.tags.length > 0 && <span className="gcard-tags">{f.tags.map((t) => <i key={t}>#{t}</i>)}</span>}
               </span>
               {f.mine && <span className="mine">내 글씨</span>}
             </button>
-            <button className={`like ${f.liked ? 'on' : ''}`} onClick={() => toggleLike(f)} aria-pressed={f.liked} aria-label={`${f.name} 좋아요 ${f.likes}개${f.liked ? ', 누름' : ''}`}>
+            <button className={`like ${f.liked ? 'on' : ''}`} onClick={() => toggleLike(f)} aria-pressed={f.liked} aria-label={`${f.no}번 글씨체 좋아요 ${f.likes}개${f.liked ? ', 누름' : ''}`}>
               <Heart on={f.liked} /><span className="count">{f.likes}</span>
             </button>
           </li>
@@ -258,19 +266,20 @@ function FontDetail({ font, canRemove, asAdmin, onLike, onTags, onClose, onRemov
   }
 
   return (
-    <dialog ref={ref} className="gdetail" onClose={onClose} onCancel={onClose} aria-label={`${font.name} 글씨체`}>
+    <dialog ref={ref} className="gdetail" onClose={onClose} onCancel={onClose} aria-label={`${font.no}번 글씨체`}>
       <div className="gdetail-head">
-        <div>
-          <h2>{font.name}</h2>
-          <p className="note">{font.author || '이름 없이'} · {fmtDate(font.createdAt)} · 직접 쓴 한글 {font.direct}자 · {font.sizeKB.toLocaleString('ko-KR')}KB</p>
-          {font.tags.length > 0 && !editTags && <p className="gcard-tags">{font.tags.map((t) => <i key={t}>#{t}</i>)}</p>}
-        </div>
+        <h2><Masked seed={font.id} cols={12} rows={2} cell={14} label="가려진 글씨체 이름" /><span className="gcard-no">No.{font.no}</span></h2>
         <div className="row">
           <button className={`like big ${font.liked ? 'on' : ''}`} onClick={onLike} aria-pressed={font.liked} aria-label={`좋아요 ${font.likes}개${font.liked ? ', 누름' : ''}`}>
             <Heart on={font.liked} /><span className="count">{font.likes}</span>
           </button>
           <button className="btn small quiet" onClick={() => { ref.current?.close(); onClose() }} aria-label="닫기">닫기</button>
         </div>
+      </div>
+      <div className="gdetail-meta">
+        <p className="note gdetail-by"><Masked seed={`${font.id}:by`} cols={6} rows={2} cell={7} label="가려진 만든 사람" /><span>{fmtDate(font.createdAt)} · 직접 쓴 한글 {font.direct}자 · {font.sizeKB.toLocaleString('ko-KR')}KB</span></p>
+        <p className="note">설치하면 글꼴 목록에 ‘{font.name}’ 이름으로 보여요.</p>
+        {font.tags.length > 0 && !editTags && <p className="gcard-tags">{font.tags.map((t) => <i key={t}>#{t}</i>)}</p>}
       </div>
       {editTags && (
         <div className="tag-field">
@@ -286,7 +295,7 @@ function FontDetail({ font, canRemove, asAdmin, onLike, onTags, onClose, onRemov
             {[16, 28, 48].map((s) => <div key={s}><span className="count">{s}px</span><p style={{ fontSize: s, fontFamily: `'${fam}'` }}>{text.split('\n')[0]}</p></div>)}
           </div>
         </>
-      ) : !fail ? <p className="note" role="status">글씨체를 불러오는 중…</p> : font.previewUrl && <img className="gdetail-img" src={font.previewUrl} alt={`${font.name} 견본`} />}
+      ) : !fail ? <p className="note" role="status">글씨체를 불러오는 중…</p> : font.previewUrl && <img className="gdetail-img" src={font.previewUrl} alt={`${font.no}번 글씨체 견본`} />}
       <div className="actions">
         <button className="btn primary" onClick={download}>TTF 내려받기</button>
         <button className="btn quiet" onClick={() => setGuide((g) => !g)} aria-expanded={guide}>설치 방법·웹폰트</button>
@@ -298,7 +307,7 @@ function FontDetail({ font, canRemove, asAdmin, onLike, onTags, onClose, onRemov
       </div>
       {sticker && fam && <StickerMaker family={fam} fontName={font.name} />}
       {guide && <InstallGuide family={font.name} getTtf={getTtf} />}
-      <p className="note">갤러리의 글씨체는 쓴 사람의 것이에요. 개인 문서나 수업 자료에 쓰고, 다시 팔거나 다른 이름으로 퍼뜨리지 마세요.{!font.mine && ' 내리기는 글씨체를 올린 사람만 할 수 있어요.'}</p>
+      <p className="note">갤러리의 글씨체는 쓴 사람의 것이에요.<br />개인 문서나 수업 자료에 쓰고, 다시 팔거나 다른 이름으로 퍼뜨리지 마세요.{!font.mine && <><br />내리기는 글씨체를 올린 사람만 할 수 있어요.</>}</p>
     </dialog>
   )
 }

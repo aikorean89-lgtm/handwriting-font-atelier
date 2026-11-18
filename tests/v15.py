@@ -89,7 +89,7 @@ with sync_playwright() as p:
 
     # ── 내보내기: 학교 공간 + 성장 기록 ──
     pg.get_by_role('button', name='이름 짓고 내려받기').click(); pg.wait_for_timeout(400)
-    pg.fill('#fname','큰칸 시험 글씨'); pg.fill('#fauthor','1학년')
+    pg.fill('#fname','큰칸 시험 글씨')
     pg.get_by_role('button', name='우리 학교 공간에만').click()
     pg.fill('.space-field input', '남성현초2026')
     pg.locator('.seal-btn').focus(); pg.keyboard.press('Enter')
@@ -100,9 +100,9 @@ with sync_playwright() as p:
     shot(pg,'05-export')
     # 공간 확인: 공간 안에서는 보이고, 전체 갤러리에서는 안 보임
     pg.locator('.pub').get_by_role('button', name='갤러리 보기').click(); pg.wait_for_timeout(1500)
-    ok(pg.locator('.space-bar.in').count()==1 and pg.locator('.gcard', has_text='큰칸 시험 글씨').count()==1, 'space gallery shows the font')
+    ok(pg.locator('.space-bar.in').count()==1 and pg.locator('.gcard:has(.mine)').count()==1, 'space gallery shows the font')
     pg.get_by_role('button', name='전체 갤러리로').click(); pg.wait_for_timeout(1500)
-    ok(pg.locator('.gcard', has_text='큰칸 시험 글씨').count()==0, 'public gallery hides space font')
+    ok(pg.locator('.gcard:has(.mine)').count()==0, 'public gallery hides space font')
     pg.get_by_role('button', name='우리 학교 공간').click(); pg.fill('.space-bar input', '다른학교'); pg.get_by_role('button', name='들어가기').click(); pg.wait_for_timeout(1500)
     ok(pg.locator('.gcard:not(.skeleton)').count()==0, 'other space is empty')
     pg.get_by_role('button', name='전체 갤러리로').click(); pg.wait_for_timeout(800)

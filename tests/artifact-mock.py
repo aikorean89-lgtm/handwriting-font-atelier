@@ -43,7 +43,7 @@ with sync_playwright() as p:
     pg.get_by_role('button', name='폰트 만들기').click()
     pg.get_by_text('문장으로 써 보세요').wait_for(timeout=180000); pg.wait_for_timeout(800)
     pg.get_by_role('button', name='이름 짓고 내려받기').click(); pg.wait_for_timeout(300)
-    pg.fill('#fname','개구 글씨'); pg.fill('#fauthor','미리보기')
+    pg.fill('#fname','개구 글씨')
     pg.locator('.seal-btn').focus(); pg.keyboard.press('Enter')
     pg.get_by_text('갤러리에 올렸어요').wait_for(timeout=30000)
     ok(len(blobs)==2,'ttf + preview uploaded as assets')

@@ -86,9 +86,9 @@ export function GrowthScreen({ onMake }: { onMake: () => void }) {
         <div>
           <p className="eyebrow">글씨 성장 기록</p>
           <h1>내 글씨가 어떻게 바뀌었을까요</h1>
-          <p className="lede">폰트를 만들 때마다 ‘성장 기록에 저장’을 누르면 여기에 쌓여요. 학기 초와 학기 말 글씨를 같은 문장으로 나란히 비교해 보세요. 기록은 이 기기에만 저장돼요.</p>
+          <p className="lede">폰트를 만들 때마다 ‘성장 기록에 저장’을 누르면 여기에 쌓여요.<br />학기 초와 학기 말 글씨를 같은 문장으로 나란히 비교해 보세요.<br />기록은 이 기기에만 저장돼요.</p>
         </div>
-        <div className="row">
+        <div className="row growth-actions">
           <button className="btn primary" onClick={onMake}>새 폰트 만들기</button>
           <button className="btn" onClick={() => fileRef.current?.click()}>TTF 파일로 기록 추가</button>
         </div>

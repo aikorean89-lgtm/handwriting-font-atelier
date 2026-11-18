@@ -1,5 +1,7 @@
 // 갤러리 API 핵심 동작 시험 (메모리 저장소): node --experimental-strip-types tests/api-test.ts
-import { handle, memoryStore } from '../api/fonts.ts'
+import { anonymizeTtf, handle, memoryStore } from '../api/fonts.ts'
+import { buildTTF } from '../src/engine/ttf.ts'
+import { writeFileSync } from 'node:fs'
 
 const ok = (c: boolean, m: string) => { if (!c) { console.error('FAIL', m); process.exit(1) } console.log('ok', m) }
 const store = memoryStore()
@@ -30,11 +32,42 @@ ok((await (await handle(new Request(`${base}?health=1`), store)).json()).ok === 
 }
 let r = await handle(new Request(base), store); ok((await r.json()).fonts.length === 0, 'empty list')
 r = await post('첫 글씨'); ok(r.status === 201, 'publish 201')
-const a = await r.json(); ok(!!a.key && a.font.author === '쪼아쌤' && !('keyHash' in a.font), 'sanitized, key returned, hash hidden')
+const a = await r.json(); ok(!!a.key && a.font.author === '' && /^폰트공방 [0-9A-F]{4}$/.test(a.font.name) && a.font.no === a.font.id.slice(-4).toUpperCase() && !('keyHash' in a.font), 'no author, numbered name, key returned, hash hidden')
+{
+  const raw = String((store.files.get(`gallery/meta/${a.font.id}.json`)!).body)
+  ok(!raw.includes('첫 글씨') && !raw.includes('쪼아') && !('name' in JSON.parse(raw)) && !('author' in JSON.parse(raw)), 'meta stores neither name nor author')
+}
 r = await post('둘째 글씨'); const b = await r.json()
 r = await post('가짜', new Blob([new Uint8Array([1, 2, 3, 4])])); ok(r.status === 400, 'non-ttf rejected')
 r = await handle(new Request(base), store); const l = await r.json()
-ok(l.fonts.length === 2 && l.fonts[0].name === '둘째 글씨', 'newest first')
+ok(l.fonts.length === 2 && l.fonts[0].id === b.font.id, 'newest first')
+ok(!JSON.stringify(l).includes('글씨"') && !JSON.stringify(l).includes('쪼아') && l.fonts.every((f: { ttfUrl: string }) => f.ttfUrl.startsWith('/api/fonts?file=')), 'list carries no names; ttf always via api')
+// 실제 TTF: 속 이름이 사람 이름이어도 저장·전달할 때 '폰트공방 번호'로 바뀐다
+{
+  const sq = (x: number, y: number, s2: number) => [{ x, y, on: true }, { x, y: y + s2, on: true }, { x: x + s2, y: y + s2, on: true }, { x: x + s2, y, on: true }]
+  const real = buildTTF([{ advance: 500, contours: [sq(50, 0, 400)] }, { advance: 300, unicodes: [32] }, { advance: 1000, unicodes: [0xac00], contours: [sq(100, 0, 700)] }],
+    { family: '조은택체', postscript: 'JoEuntaek', version: '1.000', copyright: '© 조은택 2026', license: '개인', ascender: 1000, descender: -250, lineGap: 0, typoAscender: 880, typoDescender: -120, typoLineGap: 250, xHeight: 500, capHeight: 700 })
+  const u16 = (t: string) => { const o: number[] = []; for (const ch of t) { const c = ch.charCodeAt(0); o.push(c >> 8, c & 0xff) } return Buffer.from(o) }
+  ok(Buffer.from(real).includes(u16('조은택')), 'test font really has the name inside')
+  const fd = new FormData(); fd.set('name', '조은택체'); fd.set('author', '조은택'); fd.set('ttf', new Blob([real as BlobPart]), 'a.ttf'); fd.set('preview', png, 'p.png')
+  const pr = await (await handle(new Request(base, { method: 'POST', body: fd }), store)).json()
+  const stored = Buffer.from(await (store.files.get(`gallery/fonts/${pr.font.id}.ttf`)!.body as Blob).arrayBuffer())
+  ok(!stored.includes(u16('조은택')) && !stored.includes(Buffer.from('JoEuntaek')) && stored.includes(u16(`폰트공방 ${pr.font.no}`)), 'stored ttf has no personal name')
+  const served = Buffer.from(await (await handle(new Request(new URL(pr.font.ttfUrl, base)), store)).arrayBuffer())
+  ok(served.equals(stored) || !served.includes(u16('조은택')), 'served ttf has no personal name')
+  writeFileSync(process.env.TTF_OUT || '/tmp/claude-0/-home-claude/cb1878c1-f96f-5fd1-a7d1-e0b6436fc45b/scratchpad/anon.ttf', stored)
+  // 예전 방식으로 저장된 기록(이름·만든 사람·이름 든 폰트)은 목록을 열 때 한 번 지워진다
+  const oldId = 'old0000aaaa1111'
+  store.files.set(`gallery/fonts/${oldId}.ttf`, { body: new Blob([real as BlobPart]), type: 'font/ttf', at: 0 })
+  store.files.set(`gallery/meta/${oldId}.json`, { body: JSON.stringify({ id: oldId, name: '조은택체', author: '조은택', createdAt: 1, ttfUrl: 'mem://x', previewUrl: 'mem://y', direct: 1, sizeKB: 1, keyHash: 'h' }), type: 'application/json', at: 0 })
+  const lst = await (await handle(new Request(base), store)).json()
+  ok(!JSON.stringify(lst).includes('조은택'), 'old record: list hides name')
+  const oldMeta = String(store.files.get(`gallery/meta/${oldId}.json`)!.body)
+  const oldTtf = Buffer.from(await (store.files.get(`gallery/fonts/${oldId}.ttf`)!.body as Blob).arrayBuffer())
+  ok(!oldMeta.includes('조은택') && !oldTtf.includes(u16('조은택')), 'old record scrubbed in storage')
+  ok(anonymizeTtf(new Uint8Array([1, 2, 3]), 'abcd1234') .length === 3, 'unreadable file left as is')
+  for (const id of [pr.font.id, oldId]) for (const k of [...store.files.keys()]) if (k.includes(id)) store.files.delete(k)
+}
 // 태그·좋아요
 {
   const fd = new FormData(); fd.set('name', '태그 글씨'); fd.set('tags', '귀여운,또박또박,둥근,넷째,귀여운'); fd.set('ttf', ttf, 'a.ttf'); fd.set('preview', png, 'p.png')

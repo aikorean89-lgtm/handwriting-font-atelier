@@ -3,10 +3,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { inPreviewFrame } from '../platform'
 
+// 개인정보 보호: 갤러리에는 글씨체 이름과 만든 사람을 싣지 않는다. 대신 번호로 구분한다.
 export interface GalleryFont {
   id: string
+  /** 글씨체 번호 (예: A3F2) */
+  no: string
+  /** 설치하면 보이는 이름 (예: 폰트공방 A3F2) — 사람 이름이 아니다 */
   name: string
-  author: string
   createdAt: number
   ttfUrl: string
   previewUrl: string
@@ -17,7 +20,12 @@ export interface GalleryFont {
   likes: number
   liked: boolean
 }
-export interface PublishInput { name: string; author: string; ttf: Blob; preview: Blob; direct: number; tags?: string[]; space?: string }
+/** 올릴 때도 이름·만든 사람은 보내지 않는다. ttf는 속 이름을 '폰트공방 손글씨'로 만든 것 */
+export interface PublishInput { ttf: Blob; preview: Blob; direct: number; tags?: string[]; space?: string }
+export const fontNo = (id: string) => id.slice(-4).toUpperCase()
+export const galleryFamily = (id: string) => `폰트공방 ${fontNo(id)}`
+/** 갤러리용 폰트 파일 속 이름 (서버가 다시 '폰트공방 번호'로 바꾼다) */
+export const GALLERY_UPLOAD_FAMILY = '폰트공방 손글씨'
 
 export interface GalleryBackend {
   kind: 'artifact' | 'http'
@@ -61,7 +69,7 @@ const cleanTags = (t: unknown): string[] => [...new Set((Array.isArray(t) ? t : 
 // gallery/<사용자 id> 문서 하나에 그 사람이 올린 글씨체 목록을 둔다.
 // 규칙: gallery 는 누구나 읽고 주인만 고치며, gallery/{self} 는 본인이 쓴다.
 // 좋아요는 likes/<사용자 id> 문서에 그 사람이 누른 글씨체 id 목록으로 둔다 (likes/{self} 는 본인이 쓴다).
-interface StoredFont { id: string; name: string; author: string; createdAt: number; ttf: string; preview: string; direct: number; sizeKB: number; tags?: string[]; space?: string /* 공간 코드의 지문 */ }
+interface StoredFont { id: string; name?: string; author?: string /* 예전 기록에만 있음 */; createdAt: number; ttf: string; preview: string; direct: number; sizeKB: number; tags?: string[]; space?: string /* 공간 코드의 지문 */ }
 
 class ArtifactBackend implements GalleryBackend {
   kind = 'artifact' as const
@@ -94,7 +102,7 @@ class ArtifactBackend implements GalleryBackend {
         if (!f?.ttf || !f.id) continue
         if ((f.space ?? null) !== sk) continue
         out.push({
-          id: `${d.id}/${f.id}`, name: String(f.name ?? ''), author: String(f.author ?? ''), createdAt: Number(f.createdAt) || 0,
+          id: `${d.id}/${f.id}`, no: fontNo(f.id), name: galleryFamily(f.id), createdAt: Number(f.createdAt) || 0,
           ttfUrl: `/_blob/${f.ttf}`, previewUrl: f.preview ? `/_blob/${f.preview}` : '', direct: Number(f.direct) || 0,
           sizeKB: Number(f.sizeKB) || 0, mine: d.id === uid, tags: cleanTags(f.tags),
           likes: likes.get(`${d.id}/${f.id}`) ?? 0, liked: mineLiked.has(`${d.id}/${f.id}`),
@@ -119,18 +127,18 @@ class ArtifactBackend implements GalleryBackend {
       throw new GalleryError('파일을 올리지 못했어요. 잠시 뒤 다시 해 주세요.')
     }
     const f: StoredFont = {
-      id: newId(), name: clean(p.name, 24), author: clean(p.author, 20), createdAt: Date.now(),
+      id: newId(), createdAt: Date.now(),
       ttf: ttf.id, preview: preview.id, direct: p.direct, sizeKB: Math.round(p.ttf.size / 1024), tags: cleanTags(p.tags),
       ...(p.space ? { space: (await spaceKey(p.space)) ?? undefined } : {}),
     }
-    // 같은 이름은 새 것으로 바꾸고, 한 사람당 최근 몇 개만 둔다
-    const rest = cur.filter((x) => x.name !== f.name)
-    const dropped = [...cur.filter((x) => x.name === f.name), ...rest.slice(MAX_MINE - 1)]
+    // 한 사람당 최근 몇 개만 둔다 (예전 기록의 이름·만든 사람은 이때 함께 지운다)
+    const rest = cur.map(({ name: _n, author: _a, ...x }) => x)
+    const dropped = rest.slice(MAX_MINE - 1)
     try { await ref.set({ fonts: [f, ...rest.slice(0, MAX_MINE - 1)], updatedAt: Date.now() }) } catch {
       throw new GalleryError('갤러리에 기록하지 못했어요. 이 페이지에서 쓰기 권한이 있는지 확인해 주세요.')
     }
     for (const x of dropped) { assets.delete(x.ttf).catch(() => {}); if (x.preview) assets.delete(x.preview).catch(() => {}) }
-    return { id: `${uid}/${f.id}`, name: f.name, author: f.author, createdAt: f.createdAt, ttfUrl: ttf.url, previewUrl: preview.url, direct: f.direct, sizeKB: f.sizeKB, mine: true, tags: f.tags ?? [], likes: 0, liked: false }
+    return { id: `${uid}/${f.id}`, no: fontNo(f.id), name: galleryFamily(f.id), createdAt: f.createdAt, ttfUrl: ttf.url, previewUrl: preview.url, direct: f.direct, sizeKB: f.sizeKB, mine: true, tags: f.tags ?? [], likes: 0, liked: false }
   }
   async like(id: string, on: boolean) {
     const { db, uid } = await this.ready
@@ -196,11 +204,14 @@ class HttpBackend implements GalleryBackend {
     const body = await r.json().catch(() => null)
     if (!body || !Array.isArray(body.fonts)) throw new GalleryError('갤러리를 불러오지 못했어요.')
     const keys = myKeys()
-    return (body.fonts as Omit<GalleryFont, 'mine'>[]).map((f) => ({ ...f, tags: f.tags ?? [], likes: f.likes ?? 0, liked: !!f.liked, mine: !!keys[f.id] }))
+    return (body.fonts as Omit<GalleryFont, 'mine'>[]).map((f) => ({
+      id: f.id, no: fontNo(f.id), name: galleryFamily(f.id), createdAt: f.createdAt, ttfUrl: f.ttfUrl, previewUrl: f.previewUrl,
+      direct: f.direct, sizeKB: f.sizeKB, tags: f.tags ?? [], likes: f.likes ?? 0, liked: !!f.liked, mine: !!keys[f.id],
+    }))
   }
   async publish(p: PublishInput) {
     const fd = new FormData()
-    fd.set('name', clean(p.name, 24)); fd.set('author', clean(p.author, 20)); fd.set('direct', String(p.direct))
+    fd.set('direct', String(p.direct))
     fd.set('ttf', p.ttf, 'font.ttf'); fd.set('preview', p.preview, 'preview.png'); fd.set('tags', cleanTags(p.tags).join(','))
     if (p.space) fd.set('space', p.space)
     const r = await fetch(this.base, { method: 'POST', body: fd }).catch(() => null)
@@ -208,7 +219,7 @@ class HttpBackend implements GalleryBackend {
     const body = await r.json().catch(() => ({}))
     if (!r.ok) throw r.status === 503 ? new GalleryError(SETUP_MSG, true) : new GalleryError(body.error || '갤러리에 올리지 못했어요.')
     setMyKeys({ ...myKeys(), [body.font.id]: body.key })
-    return { ...body.font, tags: body.font.tags ?? [], likes: 0, liked: false, mine: true }
+    return { ...body.font, no: fontNo(body.font.id), name: galleryFamily(body.font.id), tags: body.font.tags ?? [], likes: 0, liked: false, mine: true }
   }
   async like(id: string, on: boolean) {
     const r = await fetch(`${this.base}?like=${encodeURIComponent(id)}&on=${on ? 1 : 0}`, { method: 'POST', headers: { 'x-voter': voter() } }).catch(() => null)

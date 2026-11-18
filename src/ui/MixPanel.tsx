@@ -69,9 +69,9 @@ export function MixPanel({ cells, myName, settings }: { cells: BuildCell[]; myNa
       </div>
       <div className="mix-pick">
         {src === 'gallery' && (gal == null ? <span className="note">갤러리를 불러오는 중…</span> : gal.length === 0 ? <span className="note">갤러리에 고를 글씨체가 없어요.</span> : (
-          <select aria-label="갤러리 글씨체" value={partner?.name ?? ''} onChange={(e) => { const f = gal.find((x) => x.id === e.target.value); if (f) setPartner({ name: f.name, get: () => fetch(f.ttfUrl).then((r) => r.arrayBuffer()).then((b) => new Uint8Array(b)) }) }}>
+          <select aria-label="갤러리 글씨체" defaultValue="" onChange={(e) => { const f = gal.find((x) => x.id === e.target.value); if (f) setPartner({ name: f.name, get: () => fetch(f.ttfUrl).then((r) => r.arrayBuffer()).then((b) => new Uint8Array(b)) }) }}>
             <option value="">글씨체 고르기</option>
-            {gal.map((f) => <option key={f.id} value={f.id}>{f.name}{f.author ? ` · ${f.author}` : ''}</option>)}
+            {gal.map((f) => <option key={f.id} value={f.id}>{f.name} · {new Date(f.createdAt).toLocaleDateString('ko-KR')}</option>)}
           </select>
         ))}
         {src === 'record' && (recs == null ? <span className="note">불러오는 중…</span> : recs.length === 0 ? <span className="note">저장한 성장 기록이 없어요.</span> : (

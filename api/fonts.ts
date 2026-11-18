@@ -1,6 +1,8 @@
 // 폰트공방 글씨체 갤러리 API (Vercel Function, Vercel Blob 저장소)
 //   GET    /api/fonts[?space=코드]     공개된 글씨체 목록 (공간 코드를 주면 그 공간의 글씨체만)
-//   POST   /api/fonts                 multipart: name, author, direct, ttf, preview → { font, key }
+//   POST   /api/fonts                 multipart: direct, ttf, preview, tags, space → { font, key }
+//                                      (개인정보 보호: 글씨체 이름·만든 사람은 받지도 저장하지도 않는다.
+//                                       폰트 파일 속 이름도 '폰트공방 번호'로 바꿔 저장·전달한다)
 //   DELETE /api/fonts?id=…&key=…      올린 브라우저의 열쇠 또는 x-admin-token(GALLERY_ADMIN_TOKEN)
 //   PATCH  /api/fonts?id=…&key=…      { tags } 태그 고치기 (올린 브라우저의 열쇠 또는 관리자)
 //   POST   /api/fonts?like=…&on=1|0   좋아요 (x-voter: 브라우저마다 만든 임의 번호)
@@ -10,8 +12,10 @@
 // 또는 BLOB_STORE_ID(+ 자동 OIDC 인증)가 생긴다. 공개·비공개 저장소 모두 쓸 수 있다.
 import { del, get, list, put } from '@vercel/blob'
 
-export interface PublicFont { id: string; name: string; author: string; createdAt: number; ttfUrl: string; previewUrl: string; direct: number; sizeKB: number; tags?: string[]; likes?: number; liked?: boolean }
-interface Meta extends PublicFont { keyHash: string; spaceHash?: string }
+/** 갤러리에 보이는 정보. 이름 대신 번호(no)만 쓴다 */
+export interface PublicFont { id: string; no: string; name: string; author: ''; createdAt: number; ttfUrl: string; previewUrl: string; direct: number; sizeKB: number; tags?: string[]; likes?: number; liked?: boolean }
+/** 저장하는 정보 (예전 기록에는 name·author가 남아 있을 수 있지만 밖으로 내보내지 않는다) */
+interface Meta { id: string; createdAt: number; ttfUrl: string; previewUrl: string; direct: number; sizeKB: number; tags?: string[]; keyHash: string; spaceHash?: string; name?: string; author?: string }
 
 export interface Store {
   put(path: string, body: Blob | string, contentType: string, overwrite?: boolean): Promise<{ url: string }>
@@ -26,7 +30,11 @@ export interface Store {
 const FILE_RE = /^gallery\/(fonts\/[a-z0-9]{8,32}\.ttf|previews\/[a-z0-9]{8,32}\.png)$/
 const ttfPath = (id: string) => `gallery/fonts/${id}.ttf`
 const pngPath = (id: string) => `gallery/previews/${id}.png`
-const viaApi = (path: string) => `/api/fonts?file=${encodeURIComponent(path)}`
+// n=2: 폰트 속 이름을 가린 뒤의 주소 (예전에 받아 둔 캐시와 섞이지 않게)
+const viaApi = (path: string) => `/api/fonts?file=${encodeURIComponent(path)}&n=2`
+/** 글씨체 번호: id 끝 4자리 (예: A3F2) */
+export const fontNo = (id: string) => id.slice(-4).toUpperCase()
+export const galleryFamily = (id: string) => `폰트공방 ${fontNo(id)}`
 
 const MAX_TTF = 3 * 1024 * 1024
 const MAX_PNG = 800 * 1024
@@ -48,15 +56,104 @@ const voterOf = async (req: Request) => {
   return /^[A-Za-z0-9_-]{16,64}$/.test(v) ? (await sha('voter:' + v)).slice(0, 32) : null
 }
 
-function strip(m: Meta): PublicFont {
-  const { keyHash: _k, spaceHash: _s, ...pub } = m
-  return pub
+/** 밖으로 내보낼 항목만 골라 담는다 (이름·만든 사람·열쇠 지문은 빠진다) */
+function strip(m: Meta, isPrivate: boolean): PublicFont {
+  return {
+    // author: 앱에 저장된 예전 화면이 이 칸을 읽어서 늘 빈 값으로 둔다
+    id: m.id, no: fontNo(m.id), name: galleryFamily(m.id), author: '', createdAt: m.createdAt,
+    // 폰트 파일은 늘 API를 거쳐 내려준다: 예전에 올라온 파일도 속 이름을 가려서 준다
+    ttfUrl: viaApi(ttfPath(m.id)), previewUrl: isPrivate ? viaApi(pngPath(m.id)) : m.previewUrl,
+    direct: m.direct, sizeKB: m.sizeKB, tags: m.tags ?? [],
+  }
+}
+
+// ── 폰트 파일 속 이름 바꾸기 (name 표만 새로 쓰고 나머지 표는 그대로) ─────────────
+const be16 = (b: Uint8Array, o: number) => (b[o] << 8) | b[o + 1]
+const be32 = (b: Uint8Array, o: number) => ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0
+function sum32(b: Uint8Array): number {
+  let s = 0
+  for (let i = 0; i < b.length; i += 4) s = (s + (((b[i] << 24) | ((b[i + 1] ?? 0) << 16) | ((b[i + 2] ?? 0) << 8) | (b[i + 3] ?? 0)) >>> 0)) >>> 0
+  return s
+}
+function nameTable(recs: [number, string][]): Uint8Array {
+  const enc = (s: string) => { const o = new Uint8Array(s.length * 2); for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); o[i * 2] = c >> 8; o[i * 2 + 1] = c & 0xff } return o }
+  const entries: { lang: number; id: number; data: Uint8Array }[] = []
+  for (const lang of [0x0409, 0x0412]) for (const [id, s] of recs) entries.push({ lang, id, data: enc(s) })
+  const head = 6 + entries.length * 12
+  const out = new Uint8Array(head + entries.reduce((n, e) => n + e.data.length, 0))
+  const dv = new DataView(out.buffer)
+  dv.setUint16(0, 0); dv.setUint16(2, entries.length); dv.setUint16(4, head)
+  let off = 0
+  entries.forEach((e, i) => {
+    const p = 6 + i * 12
+    dv.setUint16(p, 3); dv.setUint16(p + 2, 1); dv.setUint16(p + 4, e.lang); dv.setUint16(p + 6, e.id); dv.setUint16(p + 8, e.data.length); dv.setUint16(p + 10, off)
+    out.set(e.data, head + off); off += e.data.length
+  })
+  return out
+}
+/** TTF 속 글꼴 이름·저작권 문구를 갤러리 번호 이름으로 바꾼다. 읽을 수 없는 파일이면 그대로 돌려준다 */
+export function anonymizeTtf(src: Uint8Array, id: string): Uint8Array {
+  try {
+    if (src.length < 12 || be32(src, 0) !== 0x00010000) return src
+    const num = be16(src, 4)
+    if (12 + num * 16 > src.length) return src
+    const tables: { tag: string; data: Uint8Array }[] = []
+    for (let i = 0; i < num; i++) {
+      const p = 12 + i * 16
+      const tag = String.fromCharCode(src[p], src[p + 1], src[p + 2], src[p + 3])
+      const off = be32(src, p + 8), len = be32(src, p + 12)
+      if (off + len > src.length) return src
+      tables.push({ tag, data: src.slice(off, off + len) })
+    }
+    const fam = galleryFamily(id), ps = `FontGongbang-${fontNo(id)}`
+    const name = nameTable([
+      [0, '© 폰트공방 갤러리'], [1, fam], [2, 'Regular'], [3, `1.000;JAGK;${ps}`], [4, fam], [5, 'Version 1.000'], [6, ps],
+      [13, '이 폰트는 글씨를 쓴 사람의 것입니다. 폰트공방 갤러리에서 받았습니다.'],
+    ])
+    const rest = tables.filter((t) => t.tag !== 'name')
+    rest.push({ tag: 'name', data: name })
+    rest.sort((a, b) => (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0))
+    const n = rest.length
+    let es = 0
+    while (1 << (es + 1) <= n) es++
+    const sr = (1 << es) * 16
+    const total = 12 + n * 16 + rest.reduce((s, t) => s + Math.ceil(t.data.length / 4) * 4, 0)
+    const out = new Uint8Array(total)
+    const dv = new DataView(out.buffer)
+    dv.setUint32(0, 0x00010000); dv.setUint16(4, n); dv.setUint16(6, sr); dv.setUint16(8, es); dv.setUint16(10, n * 16 - sr)
+    let off = 12 + n * 16, headOff = -1
+    rest.forEach((t, i) => {
+      if (t.tag === 'head') { if (t.data.length < 12) throw new Error('head'); t.data[8] = t.data[9] = t.data[10] = t.data[11] = 0 }
+      const p = 12 + i * 16
+      for (let k = 0; k < 4; k++) out[p + k] = t.tag.charCodeAt(k)
+      dv.setUint32(p + 4, sum32(t.data)); dv.setUint32(p + 8, off); dv.setUint32(p + 12, t.data.length)
+      out.set(t.data, off)
+      if (t.tag === 'head') headOff = off
+      off += Math.ceil(t.data.length / 4) * 4
+    })
+    if (headOff >= 0) dv.setUint32(headOff + 8, (0xb1b0afba - sum32(out)) >>> 0)
+    return out
+  } catch { return src }
 }
 /** 공간 코드 → 저장용 지문 (코드 자체는 저장하지 않는다) */
 export async function spaceKey(code: unknown): Promise<string | null> {
   const c = String(code ?? '').trim().toLowerCase()
   if (c.length < 2 || c.length > 30) return null
   return (await sha('space:' + c)).slice(0, 24)
+}
+
+/** 예전에 이름·만든 사람과 함께 올라온 글씨체: 기록과 폰트 파일 속 이름을 한 번 지워 둔다 */
+async function scrub(store: Store, meta: Meta) {
+  if (store.readFile) {
+    const f = await store.readFile(ttfPath(meta.id))
+    if (f) {
+      const raw = new Uint8Array(await new Response(f.body).arrayBuffer())
+      const out = anonymizeTtf(raw, meta.id)
+      if (out !== raw) await store.put(ttfPath(meta.id), new Blob([out as BlobPart], { type: 'font/ttf' }), 'font/ttf', true)
+    }
+  }
+  const { name: _n, author: _a, ...kept } = meta
+  await store.put(`gallery/meta/${meta.id}.json`, JSON.stringify(kept), 'application/json', true)
 }
 
 async function readMeta(store: Store, id: string): Promise<{ meta: Meta; url: string } | null> {
@@ -78,6 +175,12 @@ export async function handle(req: Request, store: Store | null, env: { GALLERY_A
     if (!FILE_RE.test(path) || !store.readFile) return json({ error: '잘못된 요청이에요.' }, 400)
     const f = await store.readFile(path)
     if (!f) return json({ error: '파일이 없어요.' }, 404)
+    if (path.endsWith('.ttf')) {
+      const id = path.slice('gallery/fonts/'.length, -4)
+      const raw = new Uint8Array(await new Response(f.body).arrayBuffer())
+      const ttf = anonymizeTtf(raw, id)
+      return new Response(ttf as BodyInit, { headers: { 'content-type': 'font/ttf', 'cache-control': 'public, max-age=86400', 'content-disposition': `attachment; filename="FontGongbang-${fontNo(id)}.ttf"` } })
+    }
     return new Response(f.body, { headers: { 'content-type': f.type, 'cache-control': 'public, max-age=86400' } })
   }
 
@@ -97,11 +200,13 @@ export async function handle(req: Request, store: Store | null, env: { GALLERY_A
       const t = await store.read(m.url)
       try {
         const meta = t ? JSON.parse(t) as Meta : null
-        if (!meta || (meta.spaceHash ?? null) !== space) return null
-        return strip(meta)
+        if (!meta || !isId(meta.id)) return null
+        if (meta.name !== undefined || meta.author !== undefined) await scrub(store, meta).catch(() => {})
+        if ((meta.spaceHash ?? null) !== space) return null
+        return strip(meta, !!store.private)
       } catch { return null }
     }))).filter((x): x is PublicFont => !!x)
-      .map((f) => ({ ...f, ...(store.private ? { ttfUrl: viaApi(ttfPath(f.id)), previewUrl: viaApi(pngPath(f.id)) } : {}), tags: f.tags ?? [], likes: likes.get(f.id) ?? 0, liked: mine.has(f.id) }))
+      .map((f) => ({ ...f, likes: likes.get(f.id) ?? 0, liked: mine.has(f.id) }))
       .sort((a, b) => b.createdAt - a.createdAt)
     return json({ fonts })
   }
@@ -133,23 +238,23 @@ export async function handle(req: Request, store: Store | null, env: { GALLERY_A
     if (!(head[0] === 0 && head[1] === 1 && head[2] === 0 && head[3] === 0)) return json({ error: 'TTF 파일이 아니에요.' }, 400)
     const ph = new Uint8Array(await preview.slice(0, 8).arrayBuffer())
     if (!(ph[0] === 0x89 && ph[1] === 0x50 && ph[2] === 0x4e && ph[3] === 0x47)) return json({ error: '견본 그림이 PNG가 아니에요.' }, 400)
-    const name = clean(fd.get('name'), 24)
-    if (!name) return json({ error: '폰트 이름이 필요해요.' }, 400)
+    // 이름·만든 사람(name, author)은 예전 화면이 보내더라도 저장하지 않는다
 
     const id = Date.now().toString(36) + hex(crypto.getRandomValues(new Uint8Array(4)).buffer)
     const key = hex(crypto.getRandomValues(new Uint8Array(24)).buffer)
+    const cleanTtf = anonymizeTtf(new Uint8Array(await ttf.arrayBuffer()), id)
     const [t, p] = await Promise.all([
-      store.put(ttfPath(id), ttf, 'font/ttf'),
+      store.put(ttfPath(id), new Blob([cleanTtf as BlobPart], { type: 'font/ttf' }), 'font/ttf'),
       store.put(pngPath(id), preview, 'image/png'),
     ])
     const meta: Meta = {
-      id, name, author: clean(fd.get('author'), 20), createdAt: Date.now(), ttfUrl: store.private ? viaApi(ttfPath(id)) : t.url, previewUrl: store.private ? viaApi(pngPath(id)) : p.url,
-      direct: Math.max(0, Math.min(11172, Number(fd.get('direct')) || 0)), sizeKB: Math.round(ttf.size / 1024), keyHash: await sha(key),
+      id, createdAt: Date.now(), ttfUrl: store.private ? viaApi(ttfPath(id)) : t.url, previewUrl: store.private ? viaApi(pngPath(id)) : p.url,
+      direct: Math.max(0, Math.min(11172, Number(fd.get('direct')) || 0)), sizeKB: Math.round(cleanTtf.length / 1024), keyHash: await sha(key),
       tags: cleanTags(fd.get('tags')),
       ...(fd.get('space') ? { spaceHash: (await spaceKey(fd.get('space'))) ?? undefined } : {}),
     }
     await store.put(`gallery/meta/${id}.json`, JSON.stringify(meta), 'application/json')
-    return json({ font: strip(meta), key }, 201)
+    return json({ font: strip(meta, !!store.private), key }, 201)
   }
 
   if (req.method === 'PATCH') {
@@ -161,9 +266,11 @@ export async function handle(req: Request, store: Store | null, env: { GALLERY_A
     const key = url.searchParams.get('key') || ''
     if (!admin && (!key || (await sha(key)) !== found.meta.keyHash)) return json({ error: '이 글씨체를 고칠 권한이 없어요.' }, 403)
     const body = await req.json().catch(() => ({})) as { tags?: unknown }
-    const meta: Meta = { ...found.meta, tags: cleanTags(body.tags) }
+    // 고칠 때 예전 기록에 남아 있던 이름·만든 사람도 지운다
+    const { name: _n, author: _a, ...kept } = found.meta
+    const meta: Meta = { ...kept, tags: cleanTags(body.tags) }
     await store.put(`gallery/meta/${id}.json`, JSON.stringify(meta), 'application/json', true)
-    return json({ font: strip(meta) })
+    return json({ font: strip(meta, !!store.private) })
   }
 
   if (req.method === 'DELETE') {

@@ -681,3 +681,29 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .setup-box ol { margin: 10px 0 8px; padding-left: 20px; display: grid; gap: 6px; }
 .setup-box .btn { justify-self: start; }
 .gallery-off { border-left: 3px solid var(--warn); padding-left: 12px; }
+
+/* ── 개인정보 보호: 갤러리 이름·만든 사람 모자이크 ─────────── */
+.privacy-note { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; margin: 0 0 28px; border: 1px solid var(--line-strong); border-left: 3px solid var(--text); background: var(--surface); color: var(--text-2); font-size: 14px; line-height: 1.65; }
+.privacy-note svg { flex-shrink: 0; margin-top: 2px; color: var(--text); }
+.privacy-note p { margin: 0; }
+.masked { display: block; flex-shrink: 0; fill: var(--text-3); }
+.gcard-name, .gcard-by, .gdetail-by { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.gcard-meta .gcard-no { font-family: var(--font-ui); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: var(--text-2); border: 1px solid var(--line-strong); padding: 1px 6px; }
+.gcard-meta { gap: 8px; }
+.gdetail-head h2 { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.gdetail-head h2 .gcard-no { font-family: var(--font-ui); font-size: 14px; font-weight: 700; letter-spacing: 0.04em; color: var(--text-2); border: 1px solid var(--line-strong); padding: 2px 8px; }
+.gdetail-by { margin-top: 10px !important; }
+@media (max-width: 600px) { .gdetail-head h2 .masked { width: 144px; height: 24px; } }
+
+/* ── 다듬기 (v1.6) ───────────────────────── */
+.how { padding-bottom: 0; margin-bottom: 72px; }
+.m-br { display: none; }
+@media (max-width: 640px) { .hub-tab .m-br { display: inline; } }
+.tag-field .seg { justify-self: start; }
+.gdetail-head { align-items: center; }
+.gdetail-meta { display: grid; gap: 4px; margin: -4px 0 16px; }
+.gdetail-meta p { margin: 0; }
+.gdetail-meta .gcard-tags { margin-top: 4px; }
+.gdetail-by { margin-top: 0 !important; }
+/* 버튼 묶음 기본 간격 (따로 정하지 않은 .row도 버튼이 붙지 않게) */
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }

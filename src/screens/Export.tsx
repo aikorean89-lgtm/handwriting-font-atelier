@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Head } from '../ui/common'
 import { writeFont, type BuildResult } from '../engine/build'
 import { SaveDeclined, saveFile } from '../platform'
-import { type GalleryFont, gallery, rememberSpace, savedSpace } from '../gallery/backend'
+import { GALLERY_UPLOAD_FAMILY, type GalleryFont, gallery, rememberSpace, savedSpace } from '../gallery/backend'
 import { makePreview } from '../gallery/preview'
 import { TagPicker } from './Gallery'
 import { InstallGuide } from '../ui/InstallGuide'
@@ -21,7 +21,6 @@ export function ExportScreen({ result, name, onName, onGallery, onGrowth }: {
     gallery().canPublish().then((ok) => { if (!live) return; setGalleryOk(ok); if (ok === false) setShare(false) }).catch(() => {})
     return () => { live = false }
   }, [])
-  const [author, setAuthor] = useState(() => { try { return localStorage.getItem('fontgongbang.author') ?? '' } catch { return '' } })
   const [pub, setPub] = useState<Pub>({ k: 'idle' })
   const [draft, setDraft] = useState(name || '')
   const [sealed, setSealed] = useState<{ blob: Blob; file: string; family: string } | null>(null)
@@ -41,16 +40,18 @@ export function ExportScreen({ result, name, onName, onGallery, onGrowth }: {
     const file = `${family.replace(/[\\/:*?"<>|]/g, '')}.ttf`
     setSealed({ blob, file, family }); setSaveMsg(null)
     onName(family)
-    if (share) publish(ttf, blob)
+    if (share) publish()
   }
-  const publish = async (ttf: Uint8Array, blob: Blob) => {
+  // 갤러리에는 폰트 이름·만든 사람이 들어가지 않은 파일을 따로 만들어 올린다 (개인정보 보호)
+  const publish = async () => {
     setPub({ k: 'busy' })
-    try { localStorage.setItem('fontgongbang.author', author.trim()) } catch { /* */ }
+    try { localStorage.removeItem('fontgongbang.author') } catch { /* 예전에 기억해 둔 이름 지우기 */ }
     try {
+      const ttf = writeFont(result.glyphs, GALLERY_UPLOAD_FAMILY)
       const preview = await makePreview(ttf)
       const sp = where === 'space' && space.trim().length >= 2 ? space.trim() : undefined
       if (sp) rememberSpace(sp)
-      const font = await gallery().publish({ name: family, author: author.trim(), ttf: blob, preview, direct: result.directHangul, tags, space: sp })
+      const font = await gallery().publish({ ttf: new Blob([ttf as BlobPart], { type: 'font/ttf' }), preview, direct: result.directHangul, tags, space: sp })
       setPub({ k: 'done', font })
     } catch (e) { setPub({ k: 'error', msg: (e as Error).message || '갤러리에 올리지 못했어요.' }) }
   }
@@ -81,12 +82,7 @@ export function ExportScreen({ result, name, onName, onGallery, onGrowth }: {
         <div className="name-field" style={{ flex: '1 1 320px' }}>
           <label htmlFor="fname">폰트 이름</label>
           <input id="fname" value={draft} maxLength={24} placeholder="예: 쪼아쌤 손글씨" onChange={(e) => { setDraft(e.target.value); setSealed(null) }} />
-          <span className="note">24자까지. 한글 이름도 됩니다.</span>
-        </div>
-        <div className="name-field" style={{ flex: '0 1 220px' }}>
-          <label htmlFor="fauthor">만든 사람 (갤러리에 보임)</label>
-          <input id="fauthor" value={author} maxLength={20} placeholder="예: 쪼아쌤" onChange={(e) => setAuthor(e.target.value)} />
-          <span className="note">비워 두면 이름 없이 올라가요.</span>
+          <span className="note">24자까지. 한글 이름도 됩니다. 내 파일에만 쓰이고 갤러리에는 올라가지 않아요.</span>
         </div>
         <button
           className={`seal-btn ${pressing ? 'pressing' : ''}`} onPointerDown={start} onPointerUp={cancel} onPointerLeave={cancel}
@@ -100,7 +96,12 @@ export function ExportScreen({ result, name, onName, onGallery, onGrowth }: {
 
       <label className="share-opt">
         <input type="checkbox" checked={share} onChange={(e) => setShare(e.target.checked)} disabled={!!sealed || galleryOk === false} />
-        <span><b>갤러리에 공개하기</b> 낙관을 찍으면 이 폰트 파일과 견본이 글씨체 갤러리에 올라가, 다른 사람도 보고 내려받을 수 있어요. 원본 사진은 올라가지 않아요. 언제든 내릴 수 있어요.</span>
+        <span>
+          <b>갤러리에 공개하기</b><br />
+          낙관을 찍으면 이 글씨체와 견본이 갤러리에 올라가, 다른 사람도 보고 내려받을 수 있어요.<br />
+          폰트 이름과 만든 사람은 올라가지 않고 ‘폰트공방 번호’로만 보여요.<br />
+          원본 사진도 올라가지 않고, 언제든 내릴 수 있어요.
+        </span>
       </label>
       {galleryOk === false && (
         <p className="note gallery-off" role="status">지금은 이 사이트에 <b>갤러리 저장소가 연결되지 않아</b> 갤러리에 올릴 수 없어요. 폰트 파일 내려받기와 성장 기록 저장은 그대로 돼요. (관리자가 Vercel에서 Blob 저장소를 연결하면 바로 열려요)</p>
@@ -116,7 +117,7 @@ export function ExportScreen({ result, name, onName, onGallery, onGrowth }: {
           {where === 'space' && (
             <label className="space-field">
               <span className="note">공간 코드 (선생님이 정해 준 코드, 2–30자). 같은 코드를 넣은 사람만 갤러리에서 볼 수 있어요.</span>
-              <input value={space} maxLength={30} placeholder="예: 남성현초2026" onChange={(e) => setSpace(e.target.value)} />
+              <input value={space} maxLength={30} placeholder="예: 우리학교2026" onChange={(e) => setSpace(e.target.value)} />
             </label>
           )}
         </div>
@@ -154,12 +155,12 @@ export function ExportScreen({ result, name, onName, onGallery, onGrowth }: {
         <div className={`pub pub-${pub.k}`} role="status" aria-live="polite">
           {pub.k === 'busy' && <span>갤러리에 올리는 중…</span>}
           {pub.k === 'done' && <><span><b>갤러리에 올렸어요.</b> {where === 'space' && space.trim().length >= 2 ? `‘${space.trim()}’ 공간에서 “${pub.font.name}” 글씨체를 볼 수 있어요.` : `이제 다른 사람도 “${pub.font.name}” 글씨체를 볼 수 있어요.`}</span><button className="btn small" onClick={onGallery}>갤러리 보기</button><button className="btn small quiet" onClick={unpublish}>갤러리에서 내리기</button></>}
-          {pub.k === 'removed' && <><span>갤러리에서 내렸어요. 내 컴퓨터에 받은 파일은 그대로예요.</span><button className="btn small quiet" onClick={() => publish(writeFont(result.glyphs, sealed.family), sealed.blob)}>다시 올리기</button></>}
-          {pub.k === 'error' && <><span>{pub.msg}</span><button className="btn small quiet" onClick={() => publish(writeFont(result.glyphs, sealed.family), sealed.blob)}>다시 시도</button></>}
+          {pub.k === 'removed' && <><span>갤러리에서 내렸어요. 내 컴퓨터에 받은 파일은 그대로예요.</span><button className="btn small quiet" onClick={() => publish()}>다시 올리기</button></>}
+          {pub.k === 'error' && <><span>{pub.msg}</span><button className="btn small quiet" onClick={() => publish()}>다시 시도</button></>}
         </div>
       )}
       {sealed && !share && pub.k === 'idle' && galleryOk !== false && (
-        <p className="note">갤러리에 올리지 않았어요. <button className="linkish" onClick={() => { setShare(true); publish(writeFont(result.glyphs, sealed.family), sealed.blob) }}>지금 올리기</button></p>
+        <p className="note">갤러리에 올리지 않았어요. <button className="linkish" onClick={() => { setShare(true); publish() }}>지금 올리기</button></p>
       )}
 
       <InstallGuide family={sealed?.family ?? family} getTtf={async () => (sealed ? new Uint8Array(await sealed.blob.arrayBuffer()) : writeFont(result.glyphs, family))} />

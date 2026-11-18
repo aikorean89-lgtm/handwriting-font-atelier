@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { lines } from './lines'
 import type { Step } from '../state'
 
 export const FLOW: { step: Step; n: string; label: string }[] = [
@@ -23,7 +24,7 @@ export function TopBar({ step, onHome, onGallery, onStep, canStep }: {
           <span className="brand-seal" aria-hidden>글</span>
           <span className="brand-text">
             <span className="brand-name">폰트공방</span>
-            <span className="brand-credit">(만든이: 남성현초 교사 조은택)</span>
+            <span className="brand-credit">(만든이: 교사 좋은탴)</span>
           </span>
         </button>
         {g >= 0 && (
@@ -67,7 +68,7 @@ export function Head({ n, title, children }: { n: string; title: ReactNode; chil
       <div className="head-num" aria-hidden>{n}</div>
       <div>
         <h1>{title}</h1>
-        {children && <p>{children}</p>}
+        {children && <p>{lines(children)}</p>}
       </div>
     </div>
   )

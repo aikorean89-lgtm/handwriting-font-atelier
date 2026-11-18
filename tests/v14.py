@@ -54,7 +54,7 @@ with sync_playwright() as p:
 
     # ── 2. 내보내기: 태그, 공개, 웹폰트 ──
     pg.get_by_role('button', name='이름 짓고 내려받기').click(); pg.wait_for_timeout(400)
-    pg.fill('#fname','시험 글씨 v14'); pg.fill('#fauthor','시험')
+    pg.fill('#fname','시험 글씨 v14')
     pg.locator('.tag-field').get_by_role('button', name='귀여운').click()
     pg.locator('.tag-field').get_by_role('button', name='굵은').click()
     pg.locator('.seal-btn').focus(); pg.keyboard.press('Enter')
@@ -72,12 +72,12 @@ with sync_playwright() as p:
 
     # ── 3. 갤러리: 태그·좋아요·인기순·잠금 ──
     pg.locator('.pub').get_by_role('button', name='갤러리 보기').click(); pg.wait_for_timeout(1500)
-    card = pg.locator('.gcard', has_text='시험 글씨 v14').first
+    card = pg.locator('.gcard:has(.mine)').first
     ok(card.locator('.gcard-tags').inner_text().replace('\n',' ').strip() in ('#귀여운 #굵은','#귀여운#굵은'), 'card shows tags')
     card.locator('.like').click(); pg.wait_for_timeout(800)
     ok(card.locator('.like .count').inner_text()=='1' and card.locator('.like').get_attribute('aria-pressed')=='true', 'like → 1')
     pg.reload(); pg.wait_for_timeout(1500)
-    card = pg.locator('.gcard', has_text='시험 글씨 v14').first
+    card = pg.locator('.gcard:has(.mine)').first
     ok(card.locator('.like .count').inner_text()=='1' and card.locator('.like').get_attribute('aria-pressed')=='true', 'like persists after reload')
     # 다른 사람 글씨 하나 (API 직접)
     png=open('/home/claude/jaguk/public/template/sheet-1.png','rb').read()
@@ -85,9 +85,9 @@ with sync_playwright() as p:
     ok(r.status==201, 'other font seeded')
     pg.reload(); pg.wait_for_timeout(1500)
     pg.locator('.gallery-tools').get_by_role('button', name='인기순').click(); pg.wait_for_timeout(300)
-    ok(pg.locator('.gcard .gcard-meta b').first.inner_text()=='시험 글씨 v14', 'popular sort puts liked first')
+    ok(pg.locator('.gcard:not(.skeleton)').first.locator('.mine').count()==1, 'popular sort puts liked first')
     pg.locator('.tag-filter').get_by_role('button', name='또박또박').click(); pg.wait_for_timeout(300)
-    ok(pg.locator('.gcard:not(.skeleton)').count()==1 and pg.locator('.gcard .gcard-meta b').first.inner_text()=='남의 글씨', 'tag filter')
+    ok(pg.locator('.gcard:not(.skeleton)').count()==1 and pg.locator('.gcard:not(.skeleton)').first.locator('.mine').count()==0, 'tag filter')
     # 남의 글씨: 내리기 없음
     pg.locator('.gcard button').first.click(); pg.wait_for_selector('.gdetail', timeout=10000); pg.wait_for_timeout(500)
     ok(pg.locator('.gdetail').get_by_role('button', name='갤러리에서 내리기').count()==0, 'cannot remove others (not admin)')
@@ -96,11 +96,11 @@ with sync_playwright() as p:
     # 관리자: 기본 잠김 → 잠금 풀기
     pg.goto(BASE+'#gallery?admin=test-admin'); pg.reload(); pg.wait_for_timeout(1500)
     ok(pg.locator('.mod-bar').count()==1 and '잠김' in pg.locator('.mod-bar').inner_text(), 'admin starts locked')
-    pg.locator('.gcard', has_text='남의 글씨').locator('button').first.click(); pg.wait_for_selector('.gdetail'); pg.wait_for_timeout(300)
+    pg.locator('.gcard:not(.skeleton):not(:has(.mine))').locator('button').first.click(); pg.wait_for_selector('.gdetail'); pg.wait_for_timeout(300)
     ok(pg.locator('.gdetail').get_by_role('button', name='관리자 권한으로 내리기').count()==0, 'locked admin sees no remove')
     pg.locator('.gdetail').get_by_role('button', name='닫기').click(); pg.wait_for_timeout(300)
     pg.locator('.mod-bar').get_by_role('button', name='잠금 풀기').click(); pg.locator('.mod-bar').get_by_role('button', name='잠금 풀기').click(); pg.wait_for_timeout(200)
-    pg.locator('.gcard', has_text='남의 글씨').locator('button').first.click(); pg.wait_for_selector('.gdetail'); pg.wait_for_timeout(300)
+    pg.locator('.gcard:not(.skeleton):not(:has(.mine))').locator('button').first.click(); pg.wait_for_selector('.gdetail'); pg.wait_for_timeout(300)
     ok(pg.locator('.gdetail').get_by_role('button', name='관리자 권한으로 내리기').count()==1, 'unlocked admin can remove')
     pg.locator('.gdetail').get_by_role('button', name='닫기').click()
     shot(pg,'04-gallery')

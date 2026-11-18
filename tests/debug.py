@@ -1,7 +1,7 @@
 from playwright.sync_api import sync_playwright
 root='/home/claude/jaguk/tests'
 with sync_playwright() as p:
-    b=p.chromium.launch(executable_path='/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell')
+    b=p.chromium.launch()
     pg=b.new_page(viewport={'width':1280,'height':900}); errs=[]
     pg.on('console', lambda m: errs.append(f'{m.type}: {m.text}'))
     pg.on('pageerror', lambda e: errs.append('PAGEERR '+str(e)))

@@ -20,7 +20,7 @@ js='''async (name) => {
   return res
 }'''
 with sync_playwright() as p:
-    b=p.chromium.launch(executable_path='/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell')
+    b=p.chromium.launch()
     pg=b.new_page(); pg.goto('http://127.0.0.1:8766/tests/synth.html'); pg.wait_for_function('window.cv')
     pg.wait_for_timeout(1500)
     for n in ['tpl-1.png','photo-q-pen.jpg']: print(n, pg.evaluate(js, n))

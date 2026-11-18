@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Head } from '../ui/common'
+import { lines } from '../ui/lines'
 import { TIERS, type Tier } from '../engine/template'
 
 export function TierScreen({ initial, onPick }: { initial?: Tier; onPick: (t: Tier) => void }) {
   const [tier, setTier] = useState<Tier>(initial ?? 'quick')
   return (
     <main className="wrap screen">
-      <Head n="01" title="얼마나 쓸지 고르세요">세 모드 모두 11,172자를 만듭니다. 차이는 직접 쓰는 글자 수입니다. 일반 모드는 빠른 모드 시트를 그대로 1번 시트로 쓰니, 나중에 올려도 다시 쓸 필요가 없어요.</Head>
+      <Head n="01" title="얼마나 쓸지 고르세요">세 모드 모두 11,172자를 만듭니다. 차이는 직접 쓰는 글자 수입니다. 빠른 모드 시트는 일반 모드의 1번 시트로도 그대로 쓸 수 있어요.</Head>
       <div className="tiers" role="group" aria-label="폰트 등급">
         {(Object.keys(TIERS) as Tier[]).filter((k) => k !== 'letter').map((k) => {
           const t = TIERS[k]
@@ -19,7 +20,7 @@ export function TierScreen({ initial, onPick }: { initial?: Tier; onPick: (t: Ti
                 <dt>쓰는 시간</dt><dd>약 {t.minutes}분</dd>
                 <dt>영문·기호</dt><dd>{t.extra}</dd>
               </dl>
-              <p>{t.desc}</p>
+              <p>{lines(t.desc)}</p>
             </button>
           )
         })}
@@ -30,7 +31,7 @@ export function TierScreen({ initial, onPick }: { initial?: Tier; onPick: (t: Ti
       <div className="letter-cta">
         <div>
           <h2>손편지 사진으로 만들기</h2>
-          <p>시트에 새로 쓸 수 없는 분의 글씨도 폰트로 남길 수 있어요. 편지·공책·카드 사진에서 글자를 골라 만들어요. 고른 글자가 많을수록 닮아요.</p>
+          <p>{lines('시트에 새로 쓸 수 없는 분의 글씨도 폰트로 남길 수 있어요. 편지·공책·카드 사진에서 글자를 골라 만들어요. 고른 글자가 많을수록 닮아요.')}</p>
         </div>
         <button className="btn gallery-cta" onClick={() => onPick('letter')}>손편지 모드로 하기</button>
       </div>

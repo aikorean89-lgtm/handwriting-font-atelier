@@ -29,6 +29,8 @@ export interface Sample {
   cons?: number // 같은 자모의 다른 샘플들과의 모양 거리 (작을수록 전형적)
   outlier?: boolean // 다른 샘플들과 모양이 달라 잘못 잘렸을 가능성이 큼
   strong?: boolean // 사람에게 확인을 부탁할 만큼 크게 다름
+  refDist?: number // 기준 글꼴의 같은 자리 자모와의 모양 거리 (획이 빠지거나 더 붙으면 커짐)
+  broken?: boolean // 기준과 너무 달라 획이 빠지거나 남의 획을 가져온 것으로 보임 (다른 글자가 될 수 있음)
 }
 
 export interface Part { sample: Sample; sx: number; sy: number; dx: number; dy: number }
@@ -70,6 +72,7 @@ export class Library {
   samples: Sample[] = []
   private stats = new Map<string, { x: number; y: number; w: number; h: number; n: number }>()
   private refCache = new Map<string, Sample>()
+  private replaced = new Set<string>()
 
   constructor(cells: SourceCell[], keep?: KeepFn) {
     for (const c of cells) {
@@ -112,6 +115,7 @@ export class Library {
         const others: number[] = []
         g.forEach((_, j) => { if (j !== i && ds[j]) others.push(chamfer(di, ds[j]!)) })
         const rd = refs[i] ? chamfer(di, refs[i]!) : null
+        if (rd != null) s.refDist = rd
         // 사람 손글씨끼리 비교가 기준 글꼴보다 믿을 만하다. 비교 상대가 적으면 기준 글꼴을 함께 본다
         if (others.length >= 3) s.cons = median(others)
         else s.cons = median(rd != null ? [...others, rd * 0.8] : others.length ? others : [1.5])
@@ -123,6 +127,14 @@ export class Library {
         s.outlier = (g.length >= 3 && c > Math.max(m * 1.45, m + 0.55)) || c > 2.6
         s.strong = (g.length >= 3 && c > Math.max(m * 2, m + 1.1)) || c > 3.2
       }
+    }
+    // 기준 글꼴(자모 기준 글꼴로 정확히 나눈 것)과 비교: 사람마다 글씨가 인쇄체와 다른 정도가 달라
+    // 그 사람의 보통 거리(중앙값)에 견주어 유난히 먼 것만 본다
+    const mr = median(this.samples.filter((s) => s.refDist != null).map((s) => s.refDist!))
+    for (const s of this.samples) {
+      if (s.edited || s.refDist == null) continue
+      if (s.refDist > Math.max(1.3, mr * 2.2)) s.outlier = true
+      if (s.refDist > Math.max(1.6, mr * 3)) { s.broken = true; s.strong = true }
     }
   }
 
@@ -155,6 +167,9 @@ export class Library {
     return out
   }
 
+  /** 받은 샘플이 모두 잘못 나뉘어 보여 기준 글꼴 모양으로 채운 자모 */
+  replacedJamo(): string[] { return [...this.replaced] }
+
   /** 출처 문맥의 상자를 목표 문맥으로 옮긴다 */
   private mapFrames(slot: Slot, src: Syl, tgt: Syl): [Box, Box] {
     const ks = geomKey(slot, src), kt = geomKey(slot, tgt)
@@ -184,6 +199,7 @@ export class Library {
       let score = 0.3 * (rank < 0 ? order.length : rank) + 1.5 * (s.cons ?? 1) + 0.5 * s.cost + contextPenalty(s) + this.deviation(s)
       if (slot === 'jung' && s.hasJong !== wantJong) score += 0.15
       if (s.edited) score -= 0.3
+      if (s.broken) score += 2
       if (score < bs) { bs = score; best = s }
     }
     return best
@@ -236,14 +252,16 @@ export class Library {
   planSlot(slot: Slot, tgt: Syl, plan: Plan) {
     const jamo = jamoIndex(slot, tgt)
     const s = this.pick(slot, jamo, tgt)
-    if (s) { plan.parts.push(this.place(s, slot, tgt)); return }
+    // 받은 샘플이 모두 망가져 보이면(예: ㅝ에서 ㅜ가 빠짐) 다른 글자가 되지 않게 기준 글꼴 모양을 쓴다
+    if (s && !s.broken) { plan.parts.push(this.place(s, slot, tgt)); return }
+    if (s?.broken) this.replaced.add(`${slot === 'cho' ? '초성' : slot === 'jung' ? '중성' : '종성'} ${slot === 'cho' ? CHO[jamo] : slot === 'jung' ? JUNG[jamo] : JONG[jamo]}`)
     // 쌍자음·겹받침은 두 자모를 나란히 놓아 만든다
     const ch = slot === 'cho' ? CHO[jamo] : slot === 'jong' ? JONG[jamo] : ''
     const split = slot === 'cho' ? CHO_SPLIT[ch] : slot === 'jong' ? JONG_SPLIT[ch] : undefined
     if (split) {
       const idxs = split.map((c) => (slot === 'cho' ? CHO.indexOf(c) : JONG.indexOf(c)))
       const parts = idxs.map((ix) => this.pick(slot, ix, slot === 'cho' ? { ...tgt, cho: ix } : { ...tgt, jong: ix }))
-      if (parts.every(Boolean)) {
+      if (parts.every((p) => p && !p.broken)) {
         const tb = this.targetBox(slot, tgt)
         const half = tb.w * 0.52
         parts.forEach((p, k) => {

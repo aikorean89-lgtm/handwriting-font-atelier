@@ -13,6 +13,7 @@ import { GalleryScreen } from './screens/Gallery'
 import { DrawScreen } from './screens/Draw'
 import { GrowthScreen } from './screens/Growth'
 import { LetterScreen } from './screens/Letter'
+import { askPersist } from './platform'
 import { type Cell, type Project, type Sheet, type Step, buildCells, clearProject, loadProject, needsResegment, newProject, resegment, saveProject } from './state'
 import { type BuildOptions, type BuildResult, buildFont } from './engine/build'
 import type { SourceCell } from './engine/model'
@@ -31,6 +32,7 @@ export default function App() {
   const [reseg, setReseg] = useState<{ done: number; total: number } | null>(null)
   const [result, setResult] = useState<BuildResult | null>(null)
   const saveTimer = useRef(0)
+  const [saveFailed, setSaveFailed] = useState(false)
 
   useEffect(() => { loadProject().then((p) => { if (p && Object.keys(p.sheets).length) setSaved(p) }) }, [])
 
@@ -38,7 +40,7 @@ export default function App() {
   useEffect(() => {
     if (!project) return
     clearTimeout(saveTimer.current)
-    saveTimer.current = window.setTimeout(() => saveProject({ ...project, step, updatedAt: Date.now() }), 600)
+    saveTimer.current = window.setTimeout(() => saveProject({ ...project, step, updatedAt: Date.now() }).then((ok) => { setSaveFailed(!ok); if (ok) askPersist() }), 600)
   }, [project, step])
 
   // 단계 막대에서 돌아가기: 단계마다 마지막으로 머문 화면, 가 본 가장 먼 단계
@@ -225,6 +227,14 @@ export default function App() {
   return (
     <>
       <TopBar step={step} onHome={goHome} onGallery={() => go('gallery')} onStep={goGroup} canStep={canStep} />
+      {saveFailed && (
+        <div className="save-warn" role="alert">
+          <div className="wrap">
+            이 기기에 작업을 저장하지 못하고 있어요.<br />
+            저장 공간이 부족하거나 사생활 보호(시크릿) 창일 수 있어요. 창을 닫기 전에 폰트를 만들어 내려받아 두세요.
+          </div>
+        </div>
+      )}
       {screen}
     </>
   )

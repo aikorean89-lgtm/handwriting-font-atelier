@@ -15,7 +15,7 @@ import { EngineStatus } from '../ui/EngineStatus'
 const sheetName = (n: number) => sheetLabel(n)
 /** 이름 끝 글자에 맞는 을/를 (숫자로 끝나면 읽는 소리로) */
 const eul = (name: string) => {
-  const last = name.at(-1) ?? ''
+  const last = name.slice(-1)
   if (/[0-9]/.test(last)) return name + ('013678'.includes(last) ? '을' : '를')
   const cp = last.codePointAt(0)! - 0xac00
   return name + (cp >= 0 && cp < 11172 && cp % 28 ? '을' : '를')

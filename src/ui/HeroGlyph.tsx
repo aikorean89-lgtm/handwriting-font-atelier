@@ -25,7 +25,8 @@ export function HeroGlyph({ ch = '한' }: { ch?: string }) {
     let raf = 0
     let cancelled = false
     const font = `800 ${Math.round(SIZE * 0.9)}px "Hahmlet Variable", serif`
-    document.fonts.load(font, ch + '학할함항안간난만산').then(() => {
+    // 인터넷이 없어 글꼴 조각을 못 받아도 기본 글꼴로 그린다
+    document.fonts.load(font, ch + '학할함항안간난만산').catch(() => null).then(() => {
       if (cancelled) return
       const css = getComputedStyle(document.documentElement)
       const col = (n: string, d: string) => css.getPropertyValue(n).trim() || d

@@ -74,7 +74,8 @@ function unpack2(b: Uint8Array, n: number): Uint8Array {
   return out
 }
 
-export async function saveProject(p: Project) {
+/** 저장했으면 true. 저장 공간이 부족하거나 사생활 보호 창이라 못 하면 false (화면 작업은 계속된다) */
+export async function saveProject(p: Project): Promise<boolean> {
   const sp: StoredProject = {
     ...p,
     sheets: Object.fromEntries(Object.entries(p.sheets).map(([k, s]) => [k, {
@@ -86,7 +87,7 @@ export async function saveProject(p: Project) {
     }])),
     edits: p.edits ? Object.fromEntries(Object.entries(p.edits).map(([ch, bm]) => [ch, { w: bm.w, bits: packBits(bm.data) }])) : undefined,
   }
-  try { await set(KEY, sp) } catch { /* 저장 공간 부족 시 무시: 화면 작업은 계속 */ }
+  try { await set(KEY, sp); return true } catch { return false }
 }
 
 export async function loadProject(): Promise<Project | null> {

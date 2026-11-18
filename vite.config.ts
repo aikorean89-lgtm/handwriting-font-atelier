@@ -21,7 +21,8 @@ function serviceWorker(): Plugin {
         }
       }
       walk(outDir)
-      const list = ['./', ...files.filter((f) => f !== 'sw.js' && f !== 'jaguk.html' && !f.endsWith('.map')).map((f) => './' + f)]
+      // 글꼴 조각(woff/woff2)은 미리 받지 않는다: 화면에 쓰이는 조각만 그때그때 받아 저장된다 (교실에서 한꺼번에 받을 양을 줄인다)
+      const list = ['./', ...files.filter((f) => f !== 'sw.js' && f !== 'jaguk.html' && !f.endsWith('.map') && !(f.startsWith('assets/') && /\.woff2?$/.test(f))).map((f) => './' + f)]
       const hash = createHash('sha256')
       for (const f of files) if (f.startsWith('assets/') || f === 'index.html') hash.update(f)
       const sw = readFileSync('sw-template.js', 'utf8')
@@ -36,4 +37,6 @@ function serviceWorker(): Plugin {
 export default defineConfig({
   base: './',
   plugins: [react(), serviceWorker()],
+  // 학교 태블릿에 많은 iPadOS 15도 열리게 문법을 낮춰 만든다
+  build: { target: ['es2020', 'safari15', 'chrome90', 'firefox90'] },
 })

@@ -22,6 +22,8 @@ export interface BuildResult {
   composed: number
   refFallback: number
   missingJamo: string[]
+  /** 잘못 나뉜 샘플밖에 없어 기준 글꼴 모양으로 채운 자모 (자모 확인에서 고치면 내 글씨가 된다) */
+  replacedJamo: string[]
   extraChars: number
   autoPunct: string[]
   /** 칸 좌표(0–1) → 글꼴 단위: x = k·u + cX, y = −k·v + cY (글자 손보기에서 거꾸로 쓴다) */
@@ -191,7 +193,7 @@ export async function buildFont(cellsIn: BuildCell[], family: string, onProgress
   const all = [...glyphs, ...composites.map((g) => (g.components!.length ? g : { advance: g.advance, unicodes: g.unicodes }))]
   const ttf = writeFont(all, family)
   onProgress({ phase: 'done', done: 1, total: 1, direct: directSet, composedUpTo: SCOUNT })
-  return { ttf, glyphs: all, directChars: [...direct.keys()].map((c) => String.fromCodePoint(c)), family, directHangul: direct.size, composed, refFallback, missingJamo: lib.missingJamo(), extraChars, autoPunct, frame: { k, cX, cY } }
+  return { ttf, glyphs: all, directChars: [...direct.keys()].map((c) => String.fromCodePoint(c)), family, directHangul: direct.size, composed, refFallback, missingJamo: lib.missingJamo(), replacedJamo: lib.replacedJamo(), extraChars, autoPunct, frame: { k, cX, cY } }
 }
 
 /** 같은 글리프로 이름만 바꿔 다시 쓴다 */

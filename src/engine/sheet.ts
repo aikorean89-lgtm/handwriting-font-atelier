@@ -27,19 +27,38 @@ export interface MarkerDetection { ids: number[]; corners: Record<number, Pt[]> 
 
 const INSET_MM = 0.7
 
+/** 그림 요소로 읽기 (createImageBitmap이 못 읽는 HEIC 사진·예전 iOS에서도 브라우저가 보여 줄 수 있으면 읽힌다) */
+function loadAsImage(file: Blob): Promise<HTMLImageElement> {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => { URL.revokeObjectURL(url); res(img) }
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('image')) }
+    img.src = url
+  })
+}
+
 export async function fileToCanvas(file: Blob, maxSide = 3600): Promise<HTMLCanvasElement> {
-  let bmp: ImageBitmap
+  let src: ImageBitmap | HTMLImageElement
+  let w: number, h: number
   try {
-    bmp = await createImageBitmap(file, { imageOrientation: 'from-image' } as ImageBitmapOptions)
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' } as ImageBitmapOptions)
+    src = bmp; w = bmp.width; h = bmp.height
   } catch {
-    throw new Error('이 사진 형식을 읽지 못했어요. HEIC라면 JPG로 바꾸거나 카메라로 직접 찍어 주세요.')
+    try {
+      const img = await loadAsImage(file)
+      src = img; w = img.naturalWidth; h = img.naturalHeight
+    } catch {
+      throw new Error('이 사진 형식을 읽지 못했어요. HEIC라면 JPG로 바꾸거나 카메라로 직접 찍어 주세요.')
+    }
   }
-  const s = Math.min(1, maxSide / Math.max(bmp.width, bmp.height))
+  if (!w || !h) throw new Error('사진이 비어 있어요. 다시 찍어 주세요.')
+  const s = Math.min(1, maxSide / Math.max(w, h))
   const c = document.createElement('canvas')
-  c.width = Math.round(bmp.width * s)
-  c.height = Math.round(bmp.height * s)
-  c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height)
-  bmp.close?.()
+  c.width = Math.round(w * s)
+  c.height = Math.round(h * s)
+  c.getContext('2d')!.drawImage(src, 0, 0, c.width, c.height)
+  if ('close' in src) src.close()
   return c
 }
 

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Head } from '../ui/common'
 import { writeFont, type BuildResult } from '../engine/build'
-import { SaveDeclined, saveFile } from '../platform'
+import { SaveDeclined, askPersist, saveFile } from '../platform'
 import { GALLERY_UPLOAD_FAMILY, type GalleryFont, gallery, rememberSpace, savedSpace } from '../gallery/backend'
 import { makePreview } from '../gallery/preview'
 import { TagPicker } from './Gallery'
 import { InstallGuide } from '../ui/InstallGuide'
-import { addRecord } from '../history'
+import { HistoryFull, addRecord } from '../history'
 
 type Pub = { k: 'idle' } | { k: 'busy' } | { k: 'done'; font: GalleryFont } | { k: 'error'; msg: string } | { k: 'removed' }
 
@@ -29,9 +29,11 @@ export function ExportScreen({ result, name, onName, onGallery, onGrowth }: {
   const [tags, setTags] = useState<string[]>([])
   const [where, setWhere] = useState<'all' | 'space'>(() => (savedSpace() ? 'space' : 'all'))
   const [space, setSpace] = useState(() => savedSpace())
-  const [rec, setRec] = useState<'idle' | 'busy' | 'done' | 'error'>('idle')
+  const [rec, setRec] = useState<'idle' | 'busy' | 'done' | 'error' | 'full'>('idle')
   const timer = useRef(0)
-  const family = draft.trim() || '내 손글씨'
+  // 이름을 비워 두면 같은 반 친구들 폰트가 모두 '내 손글씨'가 되어 한 컴퓨터에 하나만 설치되므로 번호를 붙인다
+  const [fallbackName] = useState(() => `내 손글씨 ${String(Math.floor(1000 + Math.random() * 9000))}`)
+  const family = draft.trim() || fallbackName
 
 
   const seal = () => {
@@ -82,7 +84,7 @@ export function ExportScreen({ result, name, onName, onGallery, onGrowth }: {
         <div className="name-field" style={{ flex: '1 1 320px' }}>
           <label htmlFor="fname">폰트 이름</label>
           <input id="fname" value={draft} maxLength={24} placeholder="예: 쪼아쌤 손글씨" onChange={(e) => { setDraft(e.target.value); setSealed(null) }} />
-          <span className="note">24자까지. 한글 이름도 됩니다. 내 파일에만 쓰이고 갤러리에는 올라가지 않아요.</span>
+          <span className="note">24자까지, 한글 이름도 돼요.<br />이름이 같은 폰트는 한 컴퓨터에 하나만 설치되니 친구와 다른 이름을 지어 주세요.<br />이 이름은 내 파일에만 쓰이고 갤러리에는 올라가지 않아요.</span>
         </div>
         <button
           className={`seal-btn ${pressing ? 'pressing' : ''}`} onPointerDown={start} onPointerUp={cancel} onPointerLeave={cancel}
@@ -127,6 +129,12 @@ export function ExportScreen({ result, name, onName, onGallery, onGrowth }: {
         <p className="note">쓰지 않은 문장부호 {result.autoPunct.length}개({result.autoPunct.join(' ')})는 내 펜 굵기에 맞춰 자동으로 그렸어요.</p>
       )}
 
+      {result.replacedJamo?.length > 0 && (
+        <p className="note" style={{ color: 'var(--warn)' }}>
+          잘못 나뉜 것으로 보이는 자모({result.replacedJamo.join(', ')})는 다른 글자로 읽히지 않게 기준 글꼴 모양으로 채웠어요.<br />
+          ‘자모 확인’에서 표시된 글자를 고치면 내 글씨로 바뀌어요.
+        </p>
+      )}
       {result.missingJamo.length > 0 && (
         <p className="note" style={{ color: 'var(--warn)' }}>
           직접 받지 못한 자모({result.missingJamo.join(', ')})는 기준 글꼴 모양으로 채웠어요. 해당 칸을 다시 찍으면 바뀝니다.
@@ -140,14 +148,16 @@ export function ExportScreen({ result, name, onName, onGallery, onGrowth }: {
             try { await saveFile(sealed.file, sealed.blob); setSaveMsg('내려받았어요. 아래 설치 방법을 따라 설치하세요.') } catch (e) { setSaveMsg(e instanceof SaveDeclined ? null : (e as Error).message) }
           }}>{sealed.file} 내려받기</button>
           <button className="btn quiet" disabled={rec === 'busy' || rec === 'done'} onClick={async () => {
+            if (rec === 'full') setRec('idle')
             setRec('busy')
             try {
               await addRecord({ name: sealed.family, label: sealed.family, direct: result.directHangul, ttf: new Uint8Array(await sealed.blob.arrayBuffer()) })
-              setRec('done')
-            } catch { setRec('error') }
+              setRec('done'); askPersist()
+            } catch (e) { setRec(e instanceof HistoryFull ? 'full' : 'error') }
           }}>{rec === 'done' ? '성장 기록에 저장됨' : '성장 기록에 저장'}</button>
           {rec === 'done' && <button className="linkish" style={{ alignSelf: 'center' }} onClick={onGrowth}>기록 보기 →</button>}
           {rec === 'error' && <span className="note" role="alert" style={{ alignSelf: 'center' }}>기록을 저장하지 못했어요.</span>}
+          {rec === 'full' && <span className="note" role="alert" style={{ alignSelf: 'center' }}>성장 기록이 가득 찼어요.<br /><button className="linkish" onClick={onGrowth}>성장 기록</button>에서 필요 없는 기록을 지운 뒤 다시 눌러 주세요.</span>}
           {saveMsg && <span className="note" role="status" style={{ alignSelf: 'center' }}>{saveMsg}</span>}
         </div>
       )}

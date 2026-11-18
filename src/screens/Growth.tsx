@@ -1,7 +1,8 @@
 // 글씨 성장 기록: 저장한 폰트들을 같은 문장으로 나란히 비교하고 그림으로 저장
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { type Record, addRecord, listRecords, removeRecord, renameRecord } from '../history'
-import { SaveDeclined, saveFile } from '../platform'
+import { type Record, HistoryFull, MAX_RECORDS, addRecord, listRecords, removeRecord, renameRecord } from '../history'
+import { SaveDeclined, askPersist, iosBrowserTab, saveFile } from '../platform'
+import { safeFile } from '../engine/webfont'
 
 const fmt = (t: number) => new Date(t).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
 let seq = 0
@@ -27,10 +28,11 @@ export function GrowthScreen({ onMake }: { onMake: () => void }) {
       await new FontFace('FontGongbangCheck', ttf.slice().buffer).load()
       const label = f.name.replace(/\.ttf$/i, '').slice(0, 30) || '불러온 폰트'
       const r = await addRecord({ name: label, label, direct: 0, ttf })
+      askPersist()
       await load()
       setPick((p) => (p.includes(r.id) ? p : [...p.slice(-3), r.id]))
       setMsg(`‘${label}’ 폰트를 기록에 넣었어요. ‘이름 바꾸기’로 날짜나 학기를 적어 두세요.`)
-    } catch { setMsg('TTF 폰트 파일만 넣을 수 있어요.') }
+    } catch (e) { setMsg(e instanceof HistoryFull ? e.message : 'TTF 폰트 파일만 넣을 수 있어요.') }
   }
 
   const load = () => listRecords().then((r) => {
@@ -55,6 +57,12 @@ export function GrowthScreen({ onMake }: { onMake: () => void }) {
 
   const chosen = useMemo(() => (recs ?? []).filter((r) => pick.includes(r.id)).sort((a, b) => a.createdAt - b.createdAt), [recs, pick])
   const toggle = (id: string) => setPick((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length >= 4 ? p : [...p, id]))
+
+  const saveTtf = async (r: Record) => {
+    setMsg(null)
+    try { await saveFile(`${safeFile(r.label)}.ttf`, new Blob([r.ttf as BlobPart], { type: 'font/ttf' })); setMsg(`‘${r.label}’ 폰트를 받았어요. 다른 기기에서 ‘TTF 파일로 기록 추가’로 다시 넣을 수 있어요.`) } catch (e) { if (!(e instanceof SaveDeclined)) setMsg('저장하지 못했어요.') }
+  }
+  const ios = iosBrowserTab()
 
   const saveImage = async () => {
     setMsg(null)
@@ -86,7 +94,8 @@ export function GrowthScreen({ onMake }: { onMake: () => void }) {
         <div>
           <p className="eyebrow">글씨 성장 기록</p>
           <h1>내 글씨가 어떻게 바뀌었을까요</h1>
-          <p className="lede">폰트를 만들 때마다 ‘성장 기록에 저장’을 누르면 여기에 쌓여요.<br />학기 초와 학기 말 글씨를 같은 문장으로 나란히 비교해 보세요.<br />기록은 이 기기에만 저장돼요.</p>
+          <p className="lede">폰트를 만들 때마다 ‘성장 기록에 저장’을 누르면 여기에 쌓여요.<br />학기 초와 학기 말 글씨를 같은 문장으로 나란히 비교해 보세요.<br />기록은 이 기기에만 저장돼요. (최대 {MAX_RECORDS}개)</p>
+          {ios && <p className="note growth-ios">아이패드·아이폰 사파리는 사이트를 오래 열지 않으면 기록을 지울 수 있어요.<br />홈 화면에 앱으로 설치하거나, 기록마다 ‘TTF 받기’로 따로 보관해 두세요.</p>}
         </div>
         <div className="row growth-actions">
           <button className="btn primary" onClick={onMake}>새 폰트 만들기</button>
@@ -119,6 +128,7 @@ export function GrowthScreen({ onMake }: { onMake: () => void }) {
                   {editing === r.id
                     ? <button className="btn small" onClick={async () => { await renameRecord(r.id, label.trim() || r.label); setEditing(null); load() }}>저장</button>
                     : <button className="btn small quiet" onClick={() => { setEditing(r.id); setLabel(r.label) }}>이름 바꾸기</button>}
+                  <button className="btn small quiet" onClick={() => saveTtf(r)}>TTF 받기</button>
                   {delAsk === r.id
                     ? <><button className="btn small danger" onClick={async () => { await removeRecord(r.id); setDelAsk(null); load() }}>정말 지우기</button><button className="btn small quiet" onClick={() => setDelAsk(null)}>취소</button></>
                     : <button className="btn small quiet" onClick={() => setDelAsk(r.id)}>지우기</button>}

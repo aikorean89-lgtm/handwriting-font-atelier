@@ -5,11 +5,16 @@ import { strokeUnits } from './strokes'
 
 export const LABEL = { cho: 1, jung: 2, jong: 3 } as const
 /** 자모 나누기 방식이 바뀌면 올린다. 저장된 프로젝트의 자동 분리를 새 방식으로 다시 한다 */
-export const SEG_VERSION = 2
+export const SEG_VERSION = 3
 let VOTE_W = 0.5
 export function setVoteWeight(v: number) { VOTE_W = v }
 let REFINE = true
-let REFINE_ABOVE = 0.62
+let REFINE_ABOVE = 0.5
+let REFINE_MARGIN = 0.02
+export function setRefineMargin(v: number) { REFINE_MARGIN = v }
+/** 1 = 모음 기둥(세로 획)에 맞춤, 2 = 가로 획에 맞춤 (비트 합) */
+let WARP = 2
+export function setWarp(v: number | boolean) { WARP = v === true ? 3 : v === false ? 0 : v }
 export function setRefineAbove(v: number) { REFINE_ABOVE = v }
 export function setRefine(v: boolean) { REFINE = v }
 export const segDebug: { on: boolean; log: string[] } = { on: false, log: [] }
@@ -40,13 +45,18 @@ export function segmentScored(bm: Bitmap, ch: string): { labels: Uint8Array; cos
   const dts = slotDT(ch)
   const nSlots = ref.slot.jong ? 3 : 2
   const slotMasks = [ref.slot.cho, ref.slot.jung, ref.slot.jong]
-  // 손글씨 경계 상자 → 기준 경계 상자
-  const sx = ref.box.w / box.w, sy = ref.box.h / box.h
+  // 손글씨 경계 상자 → 기준 경계 상자. 모음의 기둥(세로 획)·가로 획을 기준 글자의 것과 맞춰 구간마다 따로 늘린다
+  // (손글씨는 초성이 넓거나 모음이 좁은 등 비율이 기준 글꼴과 달라, 상자만 맞추면 모음의 짧은 획이 초성 자리로 간다)
+  const warp = WARP ? anchors(bm, box, ref, WARP) : { xs: [[box.x, ref.box.x], [box.x + box.w, ref.box.x + ref.box.w]], ys: [[box.y, ref.box.y], [box.y + box.h, ref.box.y + ref.box.h]] }
+  const wx = (x: number) => pw(warp.xs, x), wy = (y: number) => pw(warp.ys, y)
   const toRef = (x: number, y: number) => {
-    const rx = Math.min(REF - 1, Math.max(0, Math.round(ref.box.x + (x - box.x + 0.5) * sx)))
-    const ry = Math.min(REF - 1, Math.max(0, Math.round(ref.box.y + (y - box.y + 0.5) * sy)))
+    const rx = Math.min(REF - 1, Math.max(0, Math.round(wx(x + 0.5))))
+    const ry = Math.min(REF - 1, Math.max(0, Math.round(wy(y + 0.5))))
     return ry * REF + rx
   }
+  // 정규화 좌표(기준 글자 상자 기준 0–1)
+  const NX = (x: number) => (wx(x + 0.5) - ref.box.x) / ref.box.w
+  const NY = (y: number) => (wy(y + 0.5) - ref.box.y) / ref.box.h
   // 기준 글자의 자모별 상대 상자와 잉크 비율
   type B = { x0: number; y0: number; x1: number; y1: number }
   const refBox: B[] = [], refFrac: number[] = []
@@ -97,7 +107,7 @@ export function segmentScored(bm: Bitmap, ch: string): { labels: Uint8Array; cos
       }
       best[i] = bk
       votes[comp[i]][bk]++
-      const nx = (x - box.x) / box.w, ny = (y - box.y) / box.h
+      const nx = NX(x), ny = NY(y)
       grow(cb[comp[i]], nx, ny)
       grow(sb[comp[i]][bk], nx, ny)
       if ((x + y) % 3 === 0) { samp[comp[i]].push(nx, ny); sampSplit[comp[i]][bk].push(nx, ny) }
@@ -226,7 +236,7 @@ export function segmentScored(bm: Bitmap, ch: string): { labels: Uint8Array; cos
       const u = U.unit[i]
       if (!u) continue
       uSize[u]++
-      const nx = (x - box.x) / box.w, ny = (y - box.y) / box.h
+      const nx = NX(x), ny = NY(y)
       grow(uBox[u], nx, ny)
       if ((x + y) % 3 === 0) uPts[u].push(nx, ny)
       uVote[u][best[i]]++
@@ -299,13 +309,75 @@ export function segmentScored(bm: Bitmap, ch: string): { labels: Uint8Array; cos
       segDebug.log.push(`old=${Array.from(initOld.slice(1)).join('')} ${oldCost.toFixed(3)} A=${Array.from(a.asg.slice(1)).join('')} ${a.cost.toFixed(3)} B=${Array.from(b.asg.slice(1)).join('')} ${b.cost.toFixed(3)}`)
       ;(segDebug as any).evalUnits = (str: string) => { const t = new Int8Array(n + 1); [...str].forEach((c, i) => { t[i + 1] = +c }); return evalUnits(t) }
     }
-    if (win.cost < oldCost - 0.02) {
+    if (win.cost < oldCost - REFINE_MARGIN) {
       for (let i = 0; i < labels.length; i++) if (U.unit[i]) labels[i] = win.asg[U.unit[i]]
       cleanFragments(bm, labels, 0.18, 40)
       return { labels, cost: Math.min(isFinite(bestCost) ? bestCost : 9, win.cost) / nSlots }
     }
   }
   return { labels, cost: isFinite(bestCost) ? bestCost / nSlots : 9 }
+}
+
+/** 구간별 선형 사상: knots = [[손글씨 좌표, 기준 좌표], …] (손글씨 좌표 오름차순) */
+function pw(knots: number[][], v: number): number {
+  if (v <= knots[0][0]) { const [a, b] = knots; return a[1] + (v - a[0]) * (b[1] - a[1]) / Math.max(1e-6, b[0] - a[0]) }
+  for (let i = 1; i < knots.length; i++) {
+    const a = knots[i - 1], b = knots[i]
+    if (v <= b[0] || i === knots.length - 1) return a[1] + (v - a[0]) * (b[1] - a[1]) / Math.max(1e-6, b[0] - a[0])
+  }
+  return v
+}
+
+type Run = { at: number; from: number; to: number } // 세로 획: at=x, from–to=y (가로 획은 반대)
+/** 길게 이어진 세로(또는 가로) 획 후보. 이웃한 줄을 묶어 획 하나로 본다 */
+function longRuns(data: Uint8Array, w: number, _h: number, x0: number, y0: number, x1: number, y1: number, vertical: boolean, minLen: number): Run[] {
+  const lines: { at: number; from: number; to: number }[] = []
+  const [a0, a1, b0, b1] = vertical ? [x0, x1, y0, y1] : [y0, y1, x0, x1]
+  for (let a = a0; a <= a1; a++) {
+    let best = { len: 0, from: 0, to: 0 }, run = 0, start = 0, gap = 0
+    for (let b = b0; b <= b1 + 1; b++) {
+      const on = b <= b1 && (vertical ? data[b * w + a] : data[a * w + b])
+      if (on) { if (!run) start = b; run = b - start + 1; gap = 0 } else if (run && gap < 1) { gap++ } else if (run) {
+        if (run > best.len) best = { len: run, from: start, to: start + run - 1 }
+        run = 0; gap = 0
+      }
+    }
+    if (best.len >= minLen) lines.push({ at: a, from: best.from, to: best.to })
+  }
+  const out: Run[] = []
+  for (const l of lines) {
+    const last = out[out.length - 1]
+    if (last && l.at - last.at <= 2 && l.from <= last.to && l.to >= last.from) { last.at = (last.at + l.at) / 2; last.from = Math.min(last.from, l.from); last.to = Math.max(last.to, l.to) } else out.push({ ...l })
+  }
+  return out
+}
+
+/** 기준 글자 모음의 기둥·가로 획과 손글씨에서 가장 가까운 같은 획을 찾아 구간 사상의 매듭으로 쓴다 */
+function anchors(bm: Bitmap, box: { x: number; y: number; w: number; h: number }, ref: ReturnType<typeof refMasks>, mode: number) {
+  const xs: number[][] = [[box.x, ref.box.x]], ys: number[][] = [[box.y, ref.box.y]]
+  const lin = { x: (rx: number) => box.x + (rx - ref.box.x) * box.w / ref.box.w, y: (ry: number) => box.y + (ry - ref.box.y) * box.h / ref.box.h }
+  const jm = ref.slot.jung
+  // 기준: 중성 가운데 가장 긴 세로 획(오른쪽 것)과 가장 긴 가로 획
+  const rv = longRuns(jm, REF, REF, ref.box.x, ref.box.y, ref.box.x + ref.box.w - 1, ref.box.y + ref.box.h - 1, true, ref.box.h * 0.4)
+  const rh = longRuns(jm, REF, REF, ref.box.y, ref.box.x, ref.box.y + ref.box.h - 1, ref.box.x + ref.box.w - 1, false, ref.box.w * 0.45)
+  const stem = rv.length ? rv[rv.length - 1] : null
+  const bar = rh.length ? rh.reduce((a, b) => ((b.to - b.from) > (a.to - a.from) ? b : a)) : null
+  if (stem && mode & 1) {
+    const want = lin.x(stem.at), len = (stem.to - stem.from + 1) * box.h / ref.box.h
+    const cands = longRuns(bm.data, bm.w, bm.h, box.x, box.y, box.x + box.w - 1, box.y + box.h - 1, true, len * 0.6)
+    let best: Run | null = null, bd = box.w * 0.22
+    for (const c of cands) { const d = Math.abs(c.at - want); if (d < bd) { bd = d; best = c } }
+    if (best && best.at > box.x + 2 && best.at < box.x + box.w - 2) xs.push([best.at + 0.5, stem.at + 0.5])
+  }
+  if (bar && mode & 2) {
+    const want = lin.y(bar.at), len = (bar.to - bar.from + 1) * box.w / ref.box.w
+    const cands = longRuns(bm.data, bm.w, bm.h, box.y, box.x, box.y + box.h - 1, box.x + box.w - 1, false, len * 0.6)
+    let best: Run | null = null, bd = box.h * 0.2
+    for (const c of cands) { const d = Math.abs(c.at - want); if (d < bd) { bd = d; best = c } }
+    if (best && best.at > box.y + 2 && best.at < box.y + box.h - 2) ys.push([best.at + 0.5, bar.at + 0.5])
+  }
+  xs.push([box.x + box.w, ref.box.x + ref.box.w]); ys.push([box.y + box.h, ref.box.y + ref.box.h])
+  return { xs, ys }
 }
 
 function countLabel(labels: Uint8Array, k: number) {

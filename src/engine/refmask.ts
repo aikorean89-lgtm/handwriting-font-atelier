@@ -1,7 +1,10 @@
 // 기준 폰트로 음절의 초·중·종 영역 지도를 만든다.
-// 같은 중성·종성에 초성만 바꾼 글자들에서 공통으로 남는 화소 = 중성+종성 → 나머지가 초성.
+// 기본: 자모 기준 글꼴(public/ref/jamo-ref.woff2, Noto Sans CJK KR의 위치별 첫가끝 자모 264개)로
+//   음절의 초성·중성·종성 글리프를 따로 그려 정확한 지도를 얻는다. (만든 방법: tools/jamoref/build.py)
+// 예비: 그 글꼴을 못 받으면, 같은 중성·종성에 초성만 바꾼 글자들에서 공통으로 남는 화소 = 중성+종성 → 나머지가 초성.
 import { CHO, JONG, compose, decompose, type Syl } from './hangul'
 import { type Box, components, dilate } from './bitmap'
+import jamoRef from '../data/jamo-ref.json'
 
 export const REF = 128
 const REF_FONT = '"Pretendard Variable", "Pretendard", "Noto Sans KR", sans-serif'
@@ -36,8 +39,72 @@ export function refCharsFor(ch: string): string[] {
   return out
 }
 
-/** 대조용 글자까지 웹 폰트 조각을 모두 받아 둔다 (안 받으면 대체 글꼴로 그려져 영역 지도가 어긋난다) */
+// ── 자모 기준 글꼴 ───────────────────────────────────────────────
+const JR = jamoRef as { advance: number; upm: number; L: number[][][]; V: number[][]; T: number[][] }
+const JAMO_FAMILY = 'FontGongbangJamoRef'
+let jamoLoad: Promise<boolean> | null = null
+let useJamo = false
+function loadJamoFont(): Promise<boolean> {
+  if (!jamoLoad) {
+    jamoLoad = (async () => {
+      try {
+        const base = (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/'
+        const face = new FontFace(JAMO_FAMILY, `url(${base.replace(/\/?$/, '/')}ref/jamo-ref.woff2)`)
+        await face.load()
+        document.fonts.add(face)
+        return true
+      } catch { jamoLoad = null; return false } // 다음에 다시 시도
+    })()
+  }
+  return jamoLoad
+}
+/** 음절의 초·중·종 위치별 자모 글리프 (개인 영역 코드) */
+export function jamoCodes(s: Syl): [number, number, number] {
+  const h = s.jong > 0 ? 1 : 0
+  return [JR.L[s.cho][s.jung][h], JR.V[s.jung][h], s.jong ? JR.T[s.jong][s.jung] : 0]
+}
+function jamoMasks(ch: string): RefMasks {
+  const s = decompose(ch)
+  const size = REF, N = size * size
+  const fs = Math.round(REF * 0.86)
+  const c = getCtx(size)
+  const pen = size / 2 - (JR.advance / JR.upm) * fs / 2
+  const after = pen + (JR.advance / JR.upm) * fs
+  const codes = jamoCodes(s)
+  const draw = (k: number): Uint8ClampedArray => {
+    c.clearRect(0, 0, size, size); c.fillStyle = '#fff'; c.fillRect(0, 0, size, size); c.fillStyle = '#000'
+    c.font = `${fs}px ${JAMO_FAMILY}`; c.textAlign = 'left'; c.textBaseline = 'middle'
+    const y = size / 2 + size * 0.02
+    for (let i = 0; i < 3; i++) {
+      if (!codes[i] || (k >= 0 && k !== i)) continue
+      c.fillText(String.fromCharCode(codes[i]), i === 0 ? pen : after, y)
+    }
+    return c.getImageData(0, 0, size, size).data
+  }
+  const allD = draw(-1)
+  const parts = [draw(0), draw(1), codes[2] ? draw(2) : null]
+  const all = new Uint8Array(N), cho = new Uint8Array(N), jung = new Uint8Array(N)
+  const jong = codes[2] ? new Uint8Array(N) : null
+  for (let i = 0; i < N; i++) {
+    if (allD[i * 4] >= 128) continue
+    all[i] = 1
+    // 겹친 화소는 가장 진하게 그려진 자모에 준다
+    let bk = 0, bv = 256
+    parts.forEach((d, k) => { if (d && d[i * 4] < bv) { bv = d[i * 4]; bk = k } })
+    ;(bk === 0 ? cho : bk === 1 ? jung : jong!)[i] = 1
+  }
+  let x0 = REF, y0 = REF, x1 = -1, y1 = -1
+  for (let y = 0; y < REF; y++) for (let x = 0; x < REF; x++) {
+    if (!all[y * REF + x]) continue
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y)
+  }
+  return { syl: s, all, slot: { cho, jung, jong }, box: { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 } }
+}
+
+/** 기준 글꼴을 받아 둔다. 자모 기준 글꼴을 쓰고, 못 받으면 예비 방식(대조 글자까지 웹 폰트 조각)을 받는다 */
 export async function ensureRefFont(chars: string) {
+  useJamo = await loadJamoFont()
+  if (useJamo) return
   const all = new Set<string>()
   for (const ch of chars) {
     const cp = ch.codePointAt(0) ?? 0
@@ -213,8 +280,10 @@ function persistence(all: Uint8Array, comp: Int32Array, sizes: number[], alts: s
 }
 
 export function refMasks(ch: string): RefMasks {
-  const hit = cache.get(ch)
+  const key = (useJamo ? 'j' : 'p') + ch
+  const hit = cache.get(key)
   if (hit) return hit
+  if (useJamo) { const r = jamoMasks(ch); cache.set(key, r); return r }
   const s = decompose(ch)
   const all = render(ch)
   const N = REF * REF
@@ -264,7 +333,7 @@ export function refMasks(ch: string): RefMasks {
     x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y)
   }
   const res: RefMasks = { syl: s, all, slot: { cho, jung, jong }, box: { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 } }
-  cache.set(ch, res)
+  cache.set(key, res)
   return res
 }
 

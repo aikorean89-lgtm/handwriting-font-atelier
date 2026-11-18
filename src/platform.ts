@@ -12,6 +12,22 @@ export function canUseLiveCamera(): boolean {
 
 export class SaveDeclined extends Error {}
 
+/** 브라우저가 이 사이트의 저장 자료(작업·성장 기록)를 함부로 지우지 않게 한 번 부탁한다 */
+let persistAsked = false
+export function askPersist() {
+  if (persistAsked) return
+  persistAsked = true
+  try { navigator.storage?.persist?.().catch(() => {}) } catch { /* 지원하지 않는 브라우저 */ }
+}
+
+/** 아이폰·아이패드의 사파리에서 홈 화면 앱이 아닌 채로 열었는지 (오래 안 열면 저장 자료가 지워질 수 있다) */
+export function iosBrowserTab(): boolean {
+  const ua = navigator.userAgent
+  const ios = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)
+  const standalone = (navigator as any).standalone === true || window.matchMedia?.('(display-mode: standalone)').matches
+  return ios && !standalone
+}
+
 /** 파일 내려받기. 미리보기 안에서는 저장 확인 창을 거친다 */
 export async function saveFile(filename: string, data: Blob): Promise<void> {
   if (inPreviewFrame()) {
